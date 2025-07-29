@@ -1,0 +1,43 @@
+{
+  "name": "mindmapflux",
+  "version": "1.0.0",
+  "description": "AI-powered mind mapping platform for thought organization and business ideation",
+  "main": "index.js",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "next": "^14.0.0",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
+    "@supabase/supabase-js": "^2.38.0",
+    "openai": "^4.20.0",
+    "gojs": "^3.0.0",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "marked": "^9.1.2",
+    "dompurify": "^3.0.5",
+    "jsdom": "^22.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.0.0",
+    "@types/react-dom": "^18.0.0",
+    "eslint": "^8.0.0",
+    "eslint-config-next": "^14.0.0",
+    "typescript": "^5.0.0"
+  },
+  "keywords": [
+    "mind mapping",
+    "business ideation",
+    "thought organization",
+    "AI-powered",
+    "productivity",
+    "creativity"
+  ],
+  "author": "Mindmapflux",
+  "license": "MIT"
+}
