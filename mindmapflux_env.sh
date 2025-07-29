@@ -1,0 +1,19 @@
+# .env.local (create this file in your project root)
+# Copy these variables and add your actual values
+
+# Database Configuration
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url_here
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key_here
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key_here
+
+# OpenAI Configuration
+OPENAI_API_KEY=your_openai_api_key_here
+
+# Admin Authentication
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD_HASH=$2a$10$example_bcrypt_hash_here
+JWT_SECRET=your_jwt_secret_key_here
+
+# Application Configuration
+NEXT_PUBLIC_APP_URL=https://mindmapflux.com
+NODE_ENV=production
