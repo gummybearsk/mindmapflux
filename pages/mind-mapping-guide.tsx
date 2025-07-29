@@ -747,7 +747,7 @@ export default function MindMappingGuide() {
       </div>
     </>
   );
-}8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold mr-4 mt-1">1</div>
+<div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold mr-4 mt-1">1</div>
                     <div>
                       <h4 className="font-semibold text-gray-900">Choose Your Central Topic</h4>
                       <p className="text-gray-600">Start with a clear, specific subject. Write it in the center of your page or digital canvas.</p>
