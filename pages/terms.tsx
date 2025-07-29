@@ -1,4 +1,7 @@
 // pages/terms.tsx
+import Head from 'next/head';
+import Link from 'next/link';
+
 export default function Terms() {
   return (
     <>
