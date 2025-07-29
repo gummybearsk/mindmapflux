@@ -1,59 +1,43 @@
+/** @type {import('tailwindcss').Config} */
 module.exports = {
   content: [
-    './pages/**/*.{js,ts,jsx,tsx}',
-    './components/**/*.{js,ts,jsx,tsx}',
+    './pages/**/*.{js,ts,jsx,tsx,mdx}',
+    './components/**/*.{js,ts,jsx,tsx,mdx}',
+    './app/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/**/*.{js,ts,jsx,tsx,mdx}',
   ],
   theme: {
     extend: {
-      typography: {
-        lg: {
-          css: {
-            fontSize: '18px',
-            lineHeight: '1.7',
-            h1: {
-              fontSize: '2.5rem',
-              fontWeight: '800',
-              lineHeight: '1.2',
-              marginBottom: '1rem',
-            },
-            h2: {
-              fontSize: '2rem',
-              fontWeight: '700',
-              lineHeight: '1.3',
-              marginTop: '2rem',
-              marginBottom: '1rem',
-              borderBottom: '2px solid #e5e7eb',
-              paddingBottom: '0.5rem',
-            },
-            h3: {
-              fontSize: '1.5rem',
-              fontWeight: '600',
-              lineHeight: '1.4',
-              marginTop: '1.5rem',
-              marginBottom: '0.75rem',
-            },
-            p: {
-              marginBottom: '1.25rem',
-            },
-            ul: {
-              marginBottom: '1.25rem',
-            },
-            li: {
-              marginBottom: '0.5rem',
-            },
-            a: {
-              color: '#3b82f6',
-              textDecoration: 'underline',
-              '&:hover': {
-                color: '#1d4ed8',
-              },
-            },
-          },
+      colors: {
+        primary: {
+          50: '#eff6ff',
+          100: '#dbeafe',
+          200: '#bfdbfe',
+          300: '#93c5fd',
+          400: '#60a5fa',
+          500: '#3b82f6',
+          600: '#2563eb',
+          700: '#1d4ed8',
+          800: '#1e40af',
+          900: '#1e3a8a',
         },
+        secondary: {
+          50: '#f0fdf4',
+          100: '#dcfce7',
+          200: '#bbf7d0',
+          300: '#86efac',
+          400: '#4ade80',
+          500: '#22c55e',
+          600: '#16a34a',
+          700: '#15803d',
+          800: '#166534',
+          900: '#14532d',
+        }
+      },
+      fontFamily: {
+        sans: ['Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"'],
       },
     },
   },
-  plugins: [
-    require('@tailwindcss/typography'),
-  ],
-};
+  plugins: [],
+}
