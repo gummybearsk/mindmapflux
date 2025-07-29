@@ -24,6 +24,7 @@ interface Article {
   published_at: string;
   updated_at: string;
   view_count: number;
+  htmlContent: string; // Pre-processed HTML content
 }
 
 interface ArticlePageProps {
@@ -32,9 +33,6 @@ interface ArticlePageProps {
 }
 
 export default function ArticlePage({ article, relatedArticles }: ArticlePageProps) {
-  // Convert markdown to HTML
-  const htmlContent = DOMPurify.sanitize(marked(article.content));
-
   return (
     <>
       <Head>
@@ -189,7 +187,7 @@ export default function ArticlePage({ article, relatedArticles }: ArticlePagePro
             {/* Article Body */}
             <div 
               className="prose prose-lg max-w-none"
-              dangerouslySetInnerHTML={{ __html: htmlContent }}
+              dangerouslySetInnerHTML={{ __html: article.htmlContent }}
               style={{
                 fontSize: '18px',
                 lineHeight: '1.7',
@@ -342,6 +340,10 @@ export const getStaticProps: GetStaticProps = async ({ params }) => {
       };
     }
 
+    // Process markdown to HTML server-side
+    const markdownHtml = await marked(article.content);
+    const htmlContent = DOMPurify.sanitize(markdownHtml);
+
     // Get related articles (same keywords or recent articles)
     const { data: relatedArticles } = await supabase
       .from('articles')
@@ -353,7 +355,10 @@ export const getStaticProps: GetStaticProps = async ({ params }) => {
 
     return {
       props: {
-        article,
+        article: {
+          ...article,
+          htmlContent
+        },
         relatedArticles: relatedArticles || []
       },
       revalidate: 3600 // Revalidate every hour
@@ -366,134 +371,3 @@ export const getStaticProps: GetStaticProps = async ({ params }) => {
     };
   }
 };
-
-// next.config.js
-const nextConfig = {
-  reactStrictMode: true,
-  swcMinify: true,
-  images: {
-    domains: ['images.unsplash.com', 'via.placeholder.com'],
-    formats: ['image/webp', 'image/avif'],
-  },
-  async headers() {
-    return [
-      {
-        source: '/:path*',
-        headers: [
-          {
-            key: 'X-Frame-Options',
-            value: 'DENY',
-          },
-          {
-            key: 'X-Content-Type-Options',
-            value: 'nosniff',
-          },
-          {
-            key: 'Referrer-Policy',
-            value: 'strict-origin-when-cross-origin',
-          },
-          {
-            key: 'Permissions-Policy',
-            value: 'camera=(), microphone=(), geolocation=()',
-          },
-        ],
-      },
-    ];
-  },
-  async redirects() {
-    return [
-      {
-        source: '/admin',
-        destination: '/admin/login',
-        permanent: false,
-        has: [
-          {
-            type: 'cookie',
-            key: 'auth-token',
-            value: undefined,
-          },
-        ],
-      },
-    ];
-  },
-};
-
-module.exports = nextConfig;
-
-// tailwind.config.js
-module.exports = {
-  content: [
-    './pages/**/*.{js,ts,jsx,tsx}',
-    './components/**/*.{js,ts,jsx,tsx}',
-  ],
-  theme: {
-    extend: {
-      typography: {
-        lg: {
-          css: {
-            fontSize: '18px',
-            lineHeight: '1.7',
-            h1: {
-              fontSize: '2.5rem',
-              fontWeight: '800',
-              lineHeight: '1.2',
-              marginBottom: '1rem',
-            },
-            h2: {
-              fontSize: '2rem',
-              fontWeight: '700',
-              lineHeight: '1.3',
-              marginTop: '2rem',
-              marginBottom: '1rem',
-              borderBottom: '2px solid #e5e7eb',
-              paddingBottom: '0.5rem',
-            },
-            h3: {
-              fontSize: '1.5rem',
-              fontWeight: '600',
-              lineHeight: '1.4',
-              marginTop: '1.5rem',
-              marginBottom: '0.75rem',
-            },
-            p: {
-              marginBottom: '1.25rem',
-            },
-            ul: {
-              marginBottom: '1.25rem',
-            },
-            li: {
-              marginBottom: '0.5rem',
-            },
-            a: {
-              color: '#3b82f6',
-              textDecoration: 'underline',
-              '&:hover': {
-                color: '#1d4ed8',
-              },
-            },
-          },
-        },
-      },
-    },
-  },
-  plugins: [
-    require('@tailwindcss/typography'),
-  ],
-};
-
-// .gitignore
-node_modules/
-.next/
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.DS_Store
-*.tgz
-*.tar.gz
-dist/
-build/
-.vercel
