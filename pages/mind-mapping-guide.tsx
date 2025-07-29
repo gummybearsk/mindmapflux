@@ -202,6 +202,14 @@ export default function MindMappingGuide() {
                 <h3 className="text-xl font-semibold text-gray-900 mb-4">Step-by-Step Process:</h3>
                 <div className="space-y-4">
                   <div className="flex items-start">
+                    <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold mr-4 mt-1">1</div>
+                    <div>
+                      <h4 className="font-semibold text-gray-900">Choose Your Central Topic</h4>
+                      <p className="text-gray-600">Start with a clear, specific subject. Write it in the center of your page or digital canvas.</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-start">
                     <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold mr-4 mt-1">2</div>
                     <div>
                       <h4 className="font-semibold text-gray-900">Add Main Branches</h4>
@@ -747,11 +755,4 @@ export default function MindMappingGuide() {
       </div>
     </>
   );
-                    <div>
-                      <h4 className="font-semibold text-gray-900">Choose Your Central Topic</h4>
-                      <p className="text-gray-600">Start with a clear, specific subject. Write it in the center of your page or digital canvas.</p>
-                    </div>
-                 
-                  
-                  <div className="flex items-start">
-                    <div className="w-
+}
