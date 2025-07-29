@@ -1,149 +1,133 @@
-// pages/api/auth/login.ts
-import { NextApiRequest, NextApiResponse } from 'next';
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/router';
+import Head from 'next/head';
+import Link from 'next/link';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ message: 'Method not allowed' });
+export default function AdminLogin() {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const router = useRouter();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return null; // Prevent SSR issues
   }
 
-  try {
-    const { username, password } = req.body;
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
 
-    // Validate input
-    if (!username || !password) {
-      return res.status(400).json({ message: 'Username and password required' });
-    }
-
-    // Check credentials against environment variables
-    const adminUsername = process.env.ADMIN_USERNAME;
-    const adminPasswordHash = process.env.ADMIN_PASSWORD_HASH;
-    const jwtSecret = process.env.JWT_SECRET;
-
-    if (!adminUsername || !adminPasswordHash || !jwtSecret) {
-      console.error('Admin credentials not configured');
-      return res.status(500).json({ message: 'Server configuration error' });
-    }
-
-    // Verify username
-    if (username !== adminUsername) {
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
-
-    // Verify password
-    const isValidPassword = await bcrypt.compare(password, adminPasswordHash);
-    if (!isValidPassword) {
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
-
-    // Generate JWT token
-    const token = jwt.sign(
-      { 
-        username: adminUsername,
-        role: 'admin',
-        iat: Math.floor(Date.now() / 1000)
-      },
-      jwtSecret,
-      { expiresIn: '24h' }
-    );
-
-    // Set secure HTTP-only cookie
-    res.setHeader('Set-Cookie', [
-      `auth-token=${token}; HttpOnly; Secure; SameSite=Strict; Max-Age=86400; Path=/`
-    ]);
-
-    res.status(200).json({ 
-      message: 'Login successful',
-      user: { username: adminUsername, role: 'admin' }
-    });
-
-  } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ message: 'Internal server error' });
-  }
-}
-
-// pages/api/auth/logout.ts
-export async function logoutHandler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ message: 'Method not allowed' });
-  }
-
-  // Clear the authentication cookie
-  res.setHeader('Set-Cookie', [
-    'auth-token=; HttpOnly; Secure; SameSite=Strict; Max-Age=0; Path=/'
-  ]);
-
-  res.status(200).json({ message: 'Logout successful' });
-}
-
-// pages/api/auth/verify.ts
-export async function verifyHandler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'GET') {
-    return res.status(405).json({ message: 'Method not allowed' });
-  }
-
-  try {
-    const token = req.cookies['auth-token'];
-    
-    if (!token) {
-      return res.status(401).json({ message: 'No token provided' });
-    }
-
-    const jwtSecret = process.env.JWT_SECRET;
-    if (!jwtSecret) {
-      return res.status(500).json({ message: 'Server configuration error' });
-    }
-
-    const decoded = jwt.verify(token, jwtSecret) as any;
-    
-    res.status(200).json({ 
-      user: { 
-        username: decoded.username, 
-        role: decoded.role 
-      }
-    });
-
-  } catch (error) {
-    if (error instanceof jwt.JsonWebTokenError) {
-      return res.status(401).json({ message: 'Invalid token' });
-    }
-    
-    console.error('Token verification error:', error);
-    res.status(500).json({ message: 'Internal server error' });
-  }
-}
-
-// Middleware function for protecting admin routes
-export function withAuth(handler: Function) {
-  return async (req: NextApiRequest, res: NextApiResponse) => {
     try {
-      const token = req.cookies['auth-token'];
-      
-      if (!token) {
-        return res.status(401).json({ message: 'Authentication required' });
-      }
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username, password }),
+      });
 
-      const jwtSecret = process.env.JWT_SECRET;
-      if (!jwtSecret) {
-        return res.status(500).json({ message: 'Server configuration error' });
-      }
+      const data = await response.json();
 
-      const decoded = jwt.verify(token, jwtSecret) as any;
-      
-      // Add user info to request
-      (req as any).user = decoded;
-      
-      return handler(req, res);
-      
-    } catch (error) {
-      if (error instanceof jwt.JsonWebTokenError) {
-        return res.status(401).json({ message: 'Invalid token' });
+      if (response.ok) {
+        router.push('/admin');
+      } else {
+        setError(data.error || 'Login failed');
       }
-      
-      console.error('Auth middleware error:', error);
-      return res.status(500).json({ message: 'Internal server error' });
+    } catch (err) {
+      setError('Network error. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
+
+  return (
+    <>
+      <Head>
+        <title>Admin Login - Mindmapflux</title>
+        <meta name="robots" content="noindex,nofollow" />
+      </Head>
+
+      <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+        <div className="sm:mx-auto sm:w-full sm:max-w-md">
+          <Link href="/" className="flex justify-center">
+            <h1 className="text-3xl font-bold text-blue-600">Mindmapflux</h1>
+          </Link>
+          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+            Admin Login
+          </h2>
+        </div>
+
+        <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
+          <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
+            <form className="space-y-6" onSubmit={handleSubmit}>
+              <div>
+                <label htmlFor="username" className="block text-sm font-medium text-gray-700">
+                  Username
+                </label>
+                <div className="mt-1">
+                  <input
+                    id="username"
+                    name="username"
+                    type="text"
+                    required
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                  Password
+                </label>
+                <div className="mt-1">
+                  <input
+                    id="password"
+                    name="password"
+                    type="password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  />
+                </div>
+              </div>
+
+              {error && (
+                <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md text-sm">
+                  {error}
+                </div>
+              )}
+
+              <div>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loading ? 'Signing in...' : 'Sign in'}
+                </button>
+              </div>
+            </form>
+
+            <div className="mt-6">
+              <div className="text-center">
+                <Link href="/" className="text-sm text-blue-600 hover:text-blue-500">
+                  ← Back to home
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
 }
