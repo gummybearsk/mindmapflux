@@ -1,4 +1,4 @@
-// pages/api/admin/articles/[id].ts
+// pages/api/admin/articles/index.ts
 import { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { withAuth } from '../../auth/login';
@@ -8,27 +8,24 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-async function singleArticleHandler(req: NextApiRequest, res: NextApiResponse) {
-  const { id } = req.query;
-
+async function articlesHandler(req: NextApiRequest, res: NextApiResponse) {
   try {
     if (req.method === 'GET') {
-      // Get single article
-      const { data: article, error } = await supabase
+      // Get all articles for admin
+      const { data: articles, error } = await supabase
         .from('articles')
         .select('*')
-        .eq('id', id)
-        .single();
+        .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('Error fetching article:', error);
-        return res.status(404).json({ error: 'Article not found' });
+        console.error('Error fetching articles:', error);
+        return res.status(500).json({ error: 'Failed to fetch articles' });
       }
 
-      return res.status(200).json({ article });
+      return res.status(200).json({ articles });
 
-    } else if (req.method === 'PUT') {
-      // Update article
+    } else if (req.method === 'POST') {
+      // Create new article
       const {
         title,
         content,
@@ -45,22 +42,21 @@ async function singleArticleHandler(req: NextApiRequest, res: NextApiResponse) {
         return res.status(400).json({ error: 'Missing required fields: title, content, slug' });
       }
 
-      // Check if slug already exists (excluding current article)
+      // Check if slug already exists
       const { data: existingArticle } = await supabase
         .from('articles')
         .select('id')
         .eq('slug', slug)
-        .neq('id', id)
         .single();
 
       if (existingArticle) {
         return res.status(400).json({ error: 'Article with this slug already exists' });
       }
 
-      // Update article
+      // Create article
       const { data: article, error } = await supabase
         .from('articles')
-        .update({
+        .insert([{
           title,
           content,
           excerpt: excerpt || content.substring(0, 200) + '...',
@@ -69,32 +65,18 @@ async function singleArticleHandler(req: NextApiRequest, res: NextApiResponse) {
           meta_description: meta_description || excerpt,
           keywords: keywords || '',
           published: published || false,
+          created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
-        })
-        .eq('id', id)
+        }])
         .select()
         .single();
 
       if (error) {
-        console.error('Error updating article:', error);
-        return res.status(500).json({ error: 'Failed to update article' });
+        console.error('Error creating article:', error);
+        return res.status(500).json({ error: 'Failed to create article' });
       }
 
-      return res.status(200).json({ article });
-
-    } else if (req.method === 'DELETE') {
-      // Delete article
-      const { error } = await supabase
-        .from('articles')
-        .delete()
-        .eq('id', id);
-
-      if (error) {
-        console.error('Error deleting article:', error);
-        return res.status(500).json({ error: 'Failed to delete article' });
-      }
-
-      return res.status(200).json({ message: 'Article deleted successfully' });
+      return res.status(201).json({ article });
 
     } else {
       return res.status(405).json({ error: 'Method not allowed' });
@@ -106,4 +88,4 @@ async function singleArticleHandler(req: NextApiRequest, res: NextApiResponse) {
   }
 }
 
-export default withAuth(singleArticleHandler);
+export default withAuth(articlesHandler);
