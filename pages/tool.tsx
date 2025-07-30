@@ -188,6 +188,13 @@ export default function Tool() {
       const position = positions.get(node.id) || { x: 0, y: 0 };
       const nodeSize = node.type === 'center' ? 'large' : node.type === 'main' ? 'medium' : 'small';
       
+      // Get node color based on type
+      let nodeColor = scheme.primary;
+      if (node.type === 'center') nodeColor = scheme.root;
+      else if (node.type === 'main') nodeColor = scheme.main;
+      else if (node.type === 'sub') nodeColor = scheme.sub;
+      else if (node.type === 'detail') nodeColor = scheme.detail;
+      
       return {
         id: node.id,
         type: 'default',
@@ -197,7 +204,7 @@ export default function Tool() {
           type: node.type
         },
         style: {
-          background: scheme.nodeColors[node.type as keyof typeof scheme.nodeColors] || scheme.primary,
+          background: nodeColor,
           color: '#ffffff',
           border: `2px solid ${scheme.secondary}`,
           borderRadius: nodeSize === 'large' ? '15px' : nodeSize === 'medium' ? '10px' : '8px',
