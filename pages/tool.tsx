@@ -127,7 +127,8 @@ export default function MindMapTool() {
         )
       );
 
-      goJSRef.current = diagram;
+      // Store both diagram and go reference
+      goJSRef.current = { diagram, go };
 
     } catch (error) {
       console.error('Failed to initialize GoJS:', error);
@@ -138,7 +139,7 @@ export default function MindMapTool() {
   const updateDiagram = (data: MindMapData) => {
     if (!goJSRef.current) return;
 
-    const diagram = goJSRef.current;
+    const { diagram, go } = goJSRef.current;
     
     // Convert our data to GoJS format
     const nodeDataArray = data.nodes.map(node => ({
@@ -153,7 +154,8 @@ export default function MindMapTool() {
       to: conn.to
     }));
 
-    diagram.model = new diagram.constructor.GraphLinksModel(nodeDataArray, linkDataArray);
+    // FIXED: Now using the correct go reference
+    diagram.model = new go.GraphLinksModel(nodeDataArray, linkDataArray);
   };
 
   const generateMindMap = async () => {
@@ -213,7 +215,7 @@ export default function MindMapTool() {
         URL.revokeObjectURL(url);
       } else if (format === 'png' && goJSRef.current) {
         // Export diagram as PNG
-        const diagram = goJSRef.current;
+        const { diagram } = goJSRef.current;
         const imgData = diagram.makeImageData({
           background: 'white',
           returnType: 'blob',
@@ -257,8 +259,8 @@ export default function MindMapTool() {
     setMindMapData(null);
     setInput('');
     setError('');
-    if (goJSRef.current) {
-      goJSRef.current.clear();
+    if (goJSRef.current && goJSRef.current.diagram) {
+      goJSRef.current.diagram.clear();
     }
   };
 
