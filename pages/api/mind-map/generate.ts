@@ -1,287 +1,322 @@
-// pages/api/mind-map/generate.ts
+// pages/api/mind-map/generate.ts - Enhanced AI Generation
 import { NextApiRequest, NextApiResponse } from 'next';
 import OpenAI from 'openai';
-import { createClient } from '@supabase/supabase-js';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
-interface MindMapNode {
-  id: string;
-  text: string;
-  category?: string;
-  color?: string;
-  parent?: string;
-}
-
-interface MindMapData {
-  title: string;
-  nodes: MindMapNode[];
-  connections: Array<{ from: string; to: string }>;
-}
-
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ message: 'Method not allowed' });
+// Color schemes matching your specification
+const COLOR_SCHEMES = {
+  purple: {
+    root: "#795F9C", main: "#A67CB5", sub: "#C198D4", detail: "#E0C4F3"
+  },
+  fortuneRed: {
+    root: "#D85B72", main: "#E08799", sub: "#E8A9B8", detail: "#F0CBD6"
+  },
+  calmGreen: {
+    root: "#6B8857", main: "#87A574", sub: "#A3C291", detail: "#BFDFAE"
+  },
+  pineGreen: {
+    root: "#518463", main: "#6FA080", sub: "#8DBC9D", detail: "#ABD8BA"
+  },
+  authenticBlue: {
+    root: "#4C697A", main: "#6B8595", sub: "#8AA1B0", detail: "#A9BDCB"
+  },
+  sugarBrown: {
+    root: "#886441", main: "#A58057", sub: "#C29C6D", detail: "#DFB883"
   }
+};
 
-  try {
-    const { input, sessionId } = req.body;
+// Enhanced system prompt for intelligent mind mapping
+const createSystemPrompt = (colorScheme: string = 'calmGreen') => {
+  const colors = COLOR_SCHEMES[colorScheme] || COLOR_SCHEMES.calmGreen;
+  
+  return `You are an elite business strategist, entrepreneur, investor, and professor with expertise in business, accounting, finance, and strategic planning. You have decades of experience helping startups and corporations solve complex problems.
 
-    if (!input || typeof input !== 'string') {
-      return res.status(400).json({ message: 'Input text is required' });
-    }
+Your role is to create comprehensive, intelligent mind maps that serve as complete project blueprints. You understand context deeply, create logical relationships, and know exactly what categories make sense for any topic.
 
-    // Generate mind map using OpenAI
-    const mindMap = await generateMindMapWithAI(input);
+CORE CAPABILITIES:
+- Deep business knowledge from real-world cases, theories, and models
+- SWOT analysis expertise and strategic thinking
+- Ability to break down complex projects into manageable components
+- Understanding of practical implementation challenges
+- Memory of user interactions to provide continuity
 
-    // Store the mind map in database
-    await storeMindMap(mindMap, sessionId, req);
+MIND MAP STRUCTURE REQUIREMENTS:
+1. **COMPREHENSIVE ANALYSIS**: Create complete project blueprints that understand context and logical relationships
+2. **HIERARCHICAL INTELLIGENCE**: 
+   - 1 ROOT (central concept)
+   - 4-8 MAIN categories (major strategic areas)
+   - 2-6 SUB categories per main (tactical components)  
+   - 1-4 DETAIL nodes per sub (specific actions/items)
+3. **BUSINESS EXPERTISE**: Apply deep knowledge, include real-world insights, practical takeaways
+4. **SMART POSITIONING**: Calculate non-overlapping positions using radial mathematics
+5. **EXPANDABLE DESIGN**: Each node suggests natural expansion opportunities
+6. **MEMORY**: Remember previous inputs and build upon them for evolution requests
 
-    // Track usage
-    await trackMindMapGeneration(sessionId, input.length, req);
+COLOR SYSTEM (${colorScheme}):
+- Root nodes: ${colors.root}
+- Main categories: ${colors.main}  
+- Sub categories: ${colors.sub}
+- Detail items: ${colors.detail}
 
-    res.status(200).json({ mindMap });
+POSITIONING ALGORITHM:
+- Root: Center (400, 300)
+- Main: Radial distribution, 200px radius from center
+- Sub: 120px radius from parent, avoiding overlaps
+- Detail: 80px radius from parent
 
-  } catch (error) {
-    console.error('Mind map generation error:', error);
-    res.status(500).json({ 
-      message: 'Failed to generate mind map', 
-      error: error instanceof Error ? error.message : 'Unknown error' 
-    });
-  }
-}
+TEXT RULES:
+- Concise: 1-4 words per node
+- Descriptive but brief
+- Business-appropriate language
+- Action-oriented where applicable
 
-async function generateMindMapWithAI(input: string): Promise<MindMapData> {
-  const systemPrompt = `You are an expert mind mapping AI that helps people organize their thoughts visually. 
+EXAMPLE MIND MAP STRUCTURE:
+For "start online jewelry business":
+- Root: "Online Jewelry Business"
+- Main: "Product Strategy", "Target Market", "Marketing Channels", "Operations", "Financial Planning", "Legal Structure"
+- Sub under Product Strategy: "Product Line", "Sourcing", "Quality Control", "Pricing Strategy"
+- Detail under Product Line: "Earrings", "Necklaces", "Bracelets", "Custom Orders"
 
-Your task is to analyze the user's input and create a structured mind map that:
-1. Identifies the main central topic/theme
-2. Breaks down the content into logical categories and subcategories
-3. Creates a hierarchical structure with clear relationships
-4. Uses concise, clear labels for each node
-5. Organizes information from general to specific
-
-Format your response as a JSON object with this exact structure:
+RESPONSE FORMAT:
+Always return valid JSON with this exact structure:
 {
-  "title": "Main Topic Title",
+  "title": "Central Theme",
+  "context": "Brief strategic analysis of the topic (2-3 sentences)",
   "nodes": [
     {
-      "id": "root",
-      "text": "Central Topic",
-      "category": "root",
-      "color": "#3b82f6"
-    },
-    {
-      "id": "category1",
-      "text": "Main Category 1",
-      "category": "main",
-      "color": "#10b981",
-      "parent": "root"
-    },
-    {
-      "id": "subcategory1",
-      "text": "Subcategory",
-      "category": "sub",
-      "color": "#f59e0b",
-      "parent": "category1"
+      "id": "unique_identifier",
+      "text": "Node Label",
+      "category": "root|main|sub|detail",
+      "color": "#hexcolor",
+      "parent": "parent_id_or_null",
+      "level": 0-3,
+      "importance": 1-10,
+      "x": calculated_x_position,
+      "y": calculated_y_position
     }
   ],
-  "connections": [
-    { "from": "root", "to": "category1" },
-    { "from": "category1", "to": "subcategory1" }
-  ]
+  "connections": [{"from": "parent_id", "to": "child_id"}],
+  "suggestions": ["expansion_idea_1", "expansion_idea_2", "expansion_idea_3"],
+  "expandable": true
 }
 
-Guidelines:
-- Use descriptive but concise text (1-4 words per node)
-- Create 3-7 main categories from the root
-- Each main category can have 2-5 subcategories
-- Use appropriate colors: blue for root, green for main categories, orange for subcategories, purple for details
-- Ensure all nodes are connected through the parent-child relationships
-- Generate unique IDs using descriptive names (no spaces, use underscores)
-- Focus on the most important concepts and relationships`;
+Remember: You are an expert consultant creating strategic blueprints, not just simple mind maps. Apply your deep business knowledge to provide comprehensive, actionable insights.`;
+};
 
-  const completion = await openai.chat.completions.create({
-    model: "gpt-4",
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: `Please create a mind map for the following thoughts/ideas: "${input}"` }
-    ],
-    temperature: 0.7,
-    max_tokens: 2000,
+// Smart positioning calculator
+const calculatePositions = (nodes: any[]) => {
+  const centerX = 400;
+  const centerY = 300;
+  const positions = new Map();
+
+  // Position root at center
+  const rootNode = nodes.find(n => n.category === 'root');
+  if (rootNode) {
+    positions.set(rootNode.id, { x: centerX, y: centerY });
+  }
+
+  // Position main nodes in circle around root
+  const mainNodes = nodes.filter(n => n.category === 'main');
+  const mainRadius = 220;
+  mainNodes.forEach((node, index) => {
+    const angle = (2 * Math.PI * index) / mainNodes.length - Math.PI / 2; // Start from top
+    positions.set(node.id, {
+      x: centerX + mainRadius * Math.cos(angle),
+      y: centerY + mainRadius * Math.sin(angle)
+    });
   });
 
-  const responseContent = completion.choices[0]?.message?.content;
-  if (!responseContent) {
-    throw new Error('No response from AI');
-  }
-
-  try {
-    // Parse the JSON response
-    const mindMapData = JSON.parse(responseContent);
-    
-    // Validate the structure
-    if (!mindMapData.title || !mindMapData.nodes || !mindMapData.connections) {
-      throw new Error('Invalid mind map structure');
+  // Position sub nodes around their main parents
+  const subNodes = nodes.filter(n => n.category === 'sub');
+  subNodes.forEach((node) => {
+    const parent = nodes.find(n => n.id === node.parent);
+    if (parent && positions.has(parent.id)) {
+      const parentPos = positions.get(parent.id);
+      const siblings = subNodes.filter(n => n.parent === node.parent);
+      const siblingIndex = siblings.indexOf(node);
+      const totalSiblings = siblings.length;
+      
+      const subRadius = 140;
+      const baseAngle = Math.atan2(parentPos.y - centerY, parentPos.x - centerX);
+      const spreadAngle = Math.PI / 3; // 60 degrees spread
+      const angleStep = totalSiblings > 1 ? spreadAngle / (totalSiblings - 1) : 0;
+      const angle = baseAngle - spreadAngle/2 + (angleStep * siblingIndex);
+      
+      positions.set(node.id, {
+        x: parentPos.x + subRadius * Math.cos(angle),
+        y: parentPos.y + subRadius * Math.sin(angle)
+      });
     }
+  });
 
-    // Ensure we have a root node
-    const hasRoot = mindMapData.nodes.some((node: any) => node.category === 'root');
-    if (!hasRoot) {
-      throw new Error('No root node found');
+  // Position detail nodes around their sub parents
+  const detailNodes = nodes.filter(n => n.category === 'detail');
+  detailNodes.forEach((node) => {
+    const parent = nodes.find(n => n.id === node.parent);
+    if (parent && positions.has(parent.id)) {
+      const parentPos = positions.get(parent.id);
+      const siblings = detailNodes.filter(n => n.parent === node.parent);
+      const siblingIndex = siblings.indexOf(node);
+      const totalSiblings = siblings.length;
+      
+      const detailRadius = 90;
+      const baseAngle = Math.atan2(parentPos.y - centerY, parentPos.x - centerX);
+      const spreadAngle = Math.PI / 2; // 90 degrees spread
+      const angleStep = totalSiblings > 1 ? spreadAngle / (totalSiblings - 1) : 0;
+      const angle = baseAngle - spreadAngle/2 + (angleStep * siblingIndex);
+      
+      positions.set(node.id, {
+        x: parentPos.x + detailRadius * Math.cos(angle),
+        y: parentPos.y + detailRadius * Math.sin(angle)
+      });
     }
+  });
 
-    return mindMapData;
+  return positions;
+};
 
-  } catch (parseError) {
-    console.error('Failed to parse AI response:', parseError);
-    console.error('Raw response:', responseContent);
-    
-    // Fallback: create a simple mind map from the input
-    return createFallbackMindMap(input);
-  }
-}
-
-function createFallbackMindMap(input: string): MindMapData {
-  // Simple fallback mind map when AI parsing fails
-  const words = input.split(' ').filter(word => word.length > 3);
-  const mainTopics = words.slice(0, 5);
+// Fallback mind map generator for API failures
+const generateFallbackMindMap = (input: string, colorScheme: string = 'calmGreen') => {
+  const colors = COLOR_SCHEMES[colorScheme] || COLOR_SCHEMES.calmGreen;
+  const rootId = 'root';
   
-  const nodes: MindMapNode[] = [
+  // Simple keyword extraction for fallback
+  const keywords = input.split(/[\s,]+/).filter(word => 
+    word.length > 3 && !['the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can'].includes(word.toLowerCase())
+  ).slice(0, 6);
+
+  const nodes = [
     {
-      id: 'root',
-      text: 'Main Topic',
+      id: rootId,
+      text: keywords[0] || 'Main Topic',
       category: 'root',
-      color: '#3b82f6'
+      color: colors.root,
+      parent: null,
+      level: 0,
+      importance: 10,
+      x: 400,
+      y: 300
     }
   ];
 
-  const connections: Array<{ from: string; to: string }> = [];
+  const connections = [];
 
-  mainTopics.forEach((topic, index) => {
-    const nodeId = `topic_${index}`;
+  // Create main nodes from remaining keywords
+  keywords.slice(1).forEach((keyword, index) => {
+    const nodeId = `main_${index}`;
+    const angle = (2 * Math.PI * index) / (keywords.length - 1);
+    const radius = 200;
+    
     nodes.push({
       id: nodeId,
-      text: topic,
+      text: keyword,
       category: 'main',
-      color: '#10b981',
-      parent: 'root'
+      color: colors.main,
+      parent: rootId,
+      level: 1,
+      importance: 8,
+      x: 400 + radius * Math.cos(angle),
+      y: 300 + radius * Math.sin(angle)
     });
-    connections.push({ from: 'root', to: nodeId });
+
+    connections.push({ from: rootId, to: nodeId });
   });
 
   return {
-    title: 'Organized Thoughts',
+    title: keywords[0] || 'Mind Map',
+    context: `Generated a basic mind map for: ${input.slice(0, 100)}...`,
     nodes,
-    connections
+    connections,
+    suggestions: ['Add more details', 'Expand categories', 'Include timeline'],
+    expandable: true
   };
-}
+};
 
-async function storeMindMap(mindMap: MindMapData, sessionId: string, req: NextApiRequest) {
-  try {
-    const { data, error } = await supabase
-      .from('mind_maps')
-      .insert({
-        title: mindMap.title,
-        content: mindMap,
-        user_session: sessionId,
-        is_public: false
-      });
-
-    if (error) {
-      console.error('Failed to store mind map:', error);
-    }
-  } catch (error) {
-    console.error('Database storage error:', error);
-  }
-}
-
-async function trackMindMapGeneration(sessionId: string, inputLength: number, req: NextApiRequest) {
-  try {
-    const userAgent = req.headers['user-agent'] || '';
-    const ipAddress = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
-
-    await supabase
-      .from('mind_map_usage')
-      .insert({
-        session_id: sessionId,
-        action: 'generate',
-        ip_address: ipAddress,
-        user_agent: userAgent
-      });
-  } catch (error) {
-    console.error('Usage tracking error:', error);
-  }
-}
-
-// pages/api/analytics/track.ts
-export async function analyticsHandler(req: NextApiRequest, res: NextApiResponse) {
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ message: 'Method not allowed' });
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
-    const { sessionId, action, metadata, timestamp } = req.body;
+    const { prompt, isEvolution = false, colorScheme = 'calmGreen' } = req.body;
 
-    const userAgent = req.headers['user-agent'] || '';
-    const ipAddress = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
-
-    await supabase
-      .from('mind_map_usage')
-      .insert({
-        session_id: sessionId,
-        action,
-        ip_address: ipAddress,
-        user_agent: userAgent
-      });
-
-    res.status(200).json({ success: true });
-
-  } catch (error) {
-    console.error('Analytics tracking error:', error);
-    res.status(500).json({ message: 'Internal server error' });
-  }
-}
-
-// pages/api/mind-map/save.ts
-export async function saveMindMapHandler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ message: 'Method not allowed' });
-  }
-
-  try {
-    const { mindMapData, sessionId, isPublic = false } = req.body;
-
-    if (!mindMapData || !sessionId) {
-      return res.status(400).json({ message: 'Mind map data and session ID are required' });
+    if (!prompt) {
+      return res.status(400).json({ error: 'Prompt is required' });
     }
 
-    const { data, error } = await supabase
-      .from('mind_maps')
-      .insert({
-        title: mindMapData.title,
-        content: mindMapData,
-        user_session: sessionId,
-        is_public: isPublic
-      })
-      .select()
-      .single();
+    const systemPrompt = createSystemPrompt(colorScheme);
+    
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.7,
+      max_tokens: 2000,
+    });
 
-    if (error) {
-      throw error;
+    const response = completion.choices[0]?.message?.content;
+    
+    if (!response) {
+      throw new Error('No response from AI');
     }
 
-    res.status(201).json({ mindMap: data });
+    // Parse the JSON response
+    let mindMapData;
+    try {
+      // Extract JSON from response (in case there's extra text)
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      const jsonStr = jsonMatch ? jsonMatch[0] : response;
+      mindMapData = JSON.parse(jsonStr);
+    } catch (parseError) {
+      console.error('JSON parsing failed:', parseError);
+      // Return fallback mind map
+      mindMapData = generateFallbackMindMap(prompt, colorScheme);
+    }
+
+    // Validate and enhance the mind map data
+    if (!mindMapData.nodes || !Array.isArray(mindMapData.nodes)) {
+      mindMapData = generateFallbackMindMap(prompt, colorScheme);
+    }
+
+    // Apply smart positioning if coordinates are missing
+    const positions = calculatePositions(mindMapData.nodes);
+    mindMapData.nodes = mindMapData.nodes.map(node => {
+      const pos = positions.get(node.id) || { x: 400, y: 300 };
+      return {
+        ...node,
+        x: pos.x,
+        y: pos.y
+      };
+    });
+
+    // Ensure proper color application
+    const colors = COLOR_SCHEMES[colorScheme] || COLOR_SCHEMES.calmGreen;
+    mindMapData.nodes = mindMapData.nodes.map(node => ({
+      ...node,
+      color: colors[node.category] || colors.main
+    }));
+
+    // Add metadata
+    mindMapData.timestamp = new Date().toISOString();
+    mindMapData.colorScheme = colorScheme;
+    mindMapData.isEvolution = isEvolution;
+
+    return res.status(200).json(mindMapData);
 
   } catch (error) {
-    console.error('Save mind map error:', error);
-    res.status(500).json({ message: 'Failed to save mind map' });
+    console.error('Error generating mind map:', error);
+    
+    // Return fallback mind map on any error
+    const fallbackData = generateFallbackMindMap(
+      req.body.prompt || 'Mind Map', 
+      req.body.colorScheme || 'calmGreen'
+    );
+    
+    return res.status(200).json(fallbackData);
   }
 }
