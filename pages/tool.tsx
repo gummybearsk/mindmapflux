@@ -394,7 +394,7 @@ Example: 'I want to start an online business selling courses. Need to figure out
                             return '#e5e7eb';
                           }}
                         />
-                        <Background variant={2} gap={12} size={1} />
+                        <Background />
                       </ReactFlow>
                     ) : (
                       <div className="absolute inset-0 flex items-center justify-center">
