@@ -1,4 +1,4 @@
-// pages/tool.tsx - Enhanced AI Mind Mapping Tool
+// pages/tool.tsx - Enhanced AI Mind Mapping Tool (TypeScript Fixed)
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
@@ -13,6 +13,7 @@ import ReactFlow, {
   Edge,
   Node,
   Position,
+  MarkerType,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
@@ -288,7 +289,7 @@ const convertToReactFlowData = (data: MindMapData, colorScheme: keyof typeof COL
       strokeWidth: 2,
     },
     markerEnd: {
-      type: 'arrow',
+      type: MarkerType.Arrow,
       color: scheme.main,
     },
   }));
