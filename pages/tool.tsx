@@ -1,5 +1,5 @@
-// pages/tool.tsx - React Flow Version (100% FREE & BEAUTIFUL)
-import { useState, useEffect, useCallback } from 'react';
+// pages/tool.tsx - Enhanced AI Mind Mapping Tool
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import ReactFlow, {
@@ -9,516 +9,586 @@ import ReactFlow, {
   useNodesState,
   useEdgesState,
   addEdge,
-  Node,
-  Edge,
   Connection,
-  MarkerType,
+  Edge,
+  Node,
+  Position,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
+// Enhanced interfaces
 interface MindMapNode {
   id: string;
   text: string;
-  category?: string;
-  color?: string;
+  category: 'root' | 'main' | 'sub' | 'detail';
+  color: string;
   parent?: string;
+  level: number;
+  importance?: number;
+  connections?: string[];
 }
 
 interface MindMapData {
   title: string;
   nodes: MindMapNode[];
-  connections: Array<{ from: string; to: string }>;
+  connections: { from: string; to: string }[];
+  context: string;
+  suggestions?: string[];
+  expandable: boolean;
 }
+
+// Color schemes from your specification
+const COLOR_SCHEMES = {
+  purple: {
+    name: "Absolute Purple",
+    root: "#795F9C",
+    main: "#A67CB5",
+    sub: "#C198D4",
+    detail: "#E0C4F3",
+    background: "#F8F5FB"
+  },
+  fortuneRed: {
+    name: "Fortune Red", 
+    root: "#D85B72",
+    main: "#E08799",
+    sub: "#E8A9B8",
+    detail: "#F0CBD6",
+    background: "#FDF7F8"
+  },
+  calmGreen: {
+    name: "Calm Green",
+    root: "#6B8857",
+    main: "#87A574",
+    sub: "#A3C291",
+    detail: "#BFDFAE",
+    background: "#F7FAF5"
+  },
+  pineGreen: {
+    name: "Pine Green",
+    root: "#518463",
+    main: "#6FA080",
+    sub: "#8DBC9D",
+    detail: "#ABD8BA",
+    background: "#F5F9F7"
+  },
+  authenticBlue: {
+    name: "Authentic Blue",
+    root: "#4C697A",
+    main: "#6B8595",
+    sub: "#8AA1B0",
+    detail: "#A9BDCB",
+    background: "#F5F7F9"
+  },
+  sugarBrown: {
+    name: "Sugar Brown",
+    root: "#886441",
+    main: "#A58057",
+    sub: "#C29C6D",
+    detail: "#DFB883",
+    background: "#FBF8F5"
+  }
+};
+
+// Enhanced AI prompt for better mind map generation
+const generateEnhancedPrompt = (input: string, existingNodes: MindMapNode[] = [], colorScheme: string = 'calmGreen') => {
+  const existingContext = existingNodes.length > 0 
+    ? `\n\nEXISTING MIND MAP CONTEXT: ${existingNodes.map(n => `${n.text} (${n.category})`).join(', ')}`
+    : '';
+
+  return `You are an expert business strategist, entrepreneur, and mind mapping specialist with deep knowledge in business, finance, accounting, and strategic planning. Create a comprehensive, intelligent mind map based on this input: "${input}"
+
+${existingContext}
+
+CRITICAL REQUIREMENTS:
+1. **COMPREHENSIVE ANALYSIS**: Create a complete project blueprint. Understand context deeply and create logical relationships. Know what categories make sense for this topic.
+
+2. **INTELLIGENT STRUCTURE**: 
+   - 1 ROOT node (central concept)
+   - 4-8 MAIN categories (major themes)
+   - 2-6 SUB categories per main (detailed aspects)
+   - 1-4 DETAIL nodes per sub (specific items/actions)
+
+3. **BUSINESS EXPERTISE**: Act as a successful entrepreneur/investor/professor. Apply deep business knowledge, include real-world case studies, SWOT analysis insights, and practical takeaways.
+
+4. **EXPANDABLE DESIGN**: Each node should suggest natural expansion points. Include "expandable: true" if more details can be added.
+
+5. **SMART POSITIONING**: Calculate positions to avoid overlaps using radial distribution around center.
+
+6. **COLOR CODING**: Use "${colorScheme}" scheme:
+   - Root: deepest color, center position
+   - Main: medium color, radial around root  
+   - Sub: lighter color, branching from main
+   - Detail: lightest color, final branches
+
+7. **CONCISE TEXT**: 1-4 words per node, descriptive but brief.
+
+8. **MEMORIZATION**: Remember user inputs and apply learnings to subsequent maps.
+
+EXAMPLE FOR "online business": 
+- Root: "Online Business" 
+- Main: "Product Strategy", "Marketing Channels", "Revenue Streams", "Operations", "Legal Structure", "Financial Planning"
+- Sub under Marketing: "Social Media", "Content Marketing", "Paid Ads", "SEO Strategy"
+- Detail under Social Media: "TikTok", "Instagram", "YouTube", "LinkedIn"
+
+Return JSON format:
+{
+  "title": "Central Theme",
+  "context": "Brief analysis of the topic",
+  "nodes": [
+    {
+      "id": "unique_id",
+      "text": "Node Text",
+      "category": "root|main|sub|detail", 
+      "color": "#hexcolor",
+      "parent": "parent_id",
+      "level": 0,
+      "importance": 1-10,
+      "x": calculated_x_position,
+      "y": calculated_y_position
+    }
+  ],
+  "connections": [{"from": "parent_id", "to": "child_id"}],
+  "suggestions": ["suggestion1", "suggestion2"],
+  "expandable": true|false
+}`;
+};
+
+// Smart positioning algorithm
+const calculateSmartPositions = (nodes: MindMapNode[]): { [key: string]: { x: number; y: number } } => {
+  const positions: { [key: string]: { x: number; y: number } } = {};
+  const centerX = 400;
+  const centerY = 300;
+  
+  // Find root node
+  const rootNode = nodes.find(n => n.category === 'root');
+  if (rootNode) {
+    positions[rootNode.id] = { x: centerX, y: centerY };
+  }
+
+  // Position main nodes in circle around root
+  const mainNodes = nodes.filter(n => n.category === 'main');
+  const mainRadius = 200;
+  mainNodes.forEach((node, index) => {
+    const angle = (2 * Math.PI * index) / mainNodes.length;
+    positions[node.id] = {
+      x: centerX + mainRadius * Math.cos(angle),
+      y: centerY + mainRadius * Math.sin(angle)
+    };
+  });
+
+  // Position sub nodes around their parents
+  const subNodes = nodes.filter(n => n.category === 'sub');
+  subNodes.forEach((node, index) => {
+    const parent = nodes.find(n => n.id === node.parent);
+    if (parent && positions[parent.id]) {
+      const parentPos = positions[parent.id];
+      const subRadius = 120;
+      const siblingIndex = subNodes.filter(n => n.parent === node.parent).indexOf(node);
+      const totalSiblings = subNodes.filter(n => n.parent === node.parent).length;
+      
+      const angleOffset = (2 * Math.PI * siblingIndex) / Math.max(totalSiblings, 1);
+      const baseAngle = Math.atan2(parentPos.y - centerY, parentPos.x - centerX);
+      const angle = baseAngle + angleOffset - Math.PI/4;
+      
+      positions[node.id] = {
+        x: parentPos.x + subRadius * Math.cos(angle),
+        y: parentPos.y + subRadius * Math.sin(angle)
+      };
+    }
+  });
+
+  // Position detail nodes
+  const detailNodes = nodes.filter(n => n.category === 'detail');
+  detailNodes.forEach((node) => {
+    const parent = nodes.find(n => n.id === node.parent);
+    if (parent && positions[parent.id]) {
+      const parentPos = positions[parent.id];
+      const detailRadius = 80;
+      const siblingIndex = detailNodes.filter(n => n.parent === node.parent).indexOf(node);
+      const totalSiblings = detailNodes.filter(n => n.parent === node.parent).length;
+      
+      const angleOffset = (2 * Math.PI * siblingIndex) / Math.max(totalSiblings, 1);
+      const angle = angleOffset;
+      
+      positions[node.id] = {
+        x: parentPos.x + detailRadius * Math.cos(angle),
+        y: parentPos.y + detailRadius * Math.sin(angle)
+      };
+    }
+  });
+
+  return positions;
+};
+
+// Convert to React Flow format with smart positioning
+const convertToReactFlowData = (data: MindMapData, colorScheme: keyof typeof COLOR_SCHEMES = 'calmGreen') => {
+  const scheme = COLOR_SCHEMES[colorScheme];
+  const positions = calculateSmartPositions(data.nodes);
+
+  const nodes: Node[] = data.nodes.map((node) => {
+    const pos = positions[node.id] || { x: 400, y: 300 };
+    
+    // Dynamic sizing based on category
+    const getNodeSize = (category: string) => {
+      switch (category) {
+        case 'root': return { width: 180, height: 60 };
+        case 'main': return { width: 140, height: 50 };
+        case 'sub': return { width: 120, height: 40 };
+        case 'detail': return { width: 100, height: 35 };
+        default: return { width: 120, height: 40 };
+      }
+    };
+
+    const size = getNodeSize(node.category);
+    
+    return {
+      id: node.id,
+      type: 'default',
+      position: pos,
+      data: {
+        label: (
+          <div style={{
+            padding: node.category === 'root' ? '12px 16px' : '8px 12px',
+            backgroundColor: node.color,
+            borderRadius: node.category === 'root' ? '12px' : '8px',
+            color: 'white',
+            fontWeight: node.category === 'root' ? 'bold' : node.category === 'main' ? '600' : 'normal',
+            fontSize: node.category === 'root' ? '16px' : node.category === 'main' ? '14px' : '12px',
+            textAlign: 'center',
+            width: size.width - 20,
+            height: size.height - 16,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+            border: '2px solid rgba(255,255,255,0.2)'
+          }}>
+            {node.text}
+          </div>
+        )
+      },
+      style: {
+        width: size.width,
+        height: size.height,
+        border: 'none',
+        background: 'transparent'
+      },
+      sourcePosition: Position.Right,
+      targetPosition: Position.Left,
+    };
+  });
+
+  const edges: Edge[] = data.connections.map((conn, index) => ({
+    id: `edge-${index}`,
+    source: conn.from,
+    target: conn.to,
+    type: 'straight',
+    style: {
+      stroke: scheme.main,
+      strokeWidth: 2,
+    },
+    markerEnd: {
+      type: 'arrow',
+      color: scheme.main,
+    },
+  }));
+
+  return { nodes, edges };
+};
 
 export default function MindMapTool() {
   const [input, setInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const [mindMapData, setMindMapData] = useState<MindMapData | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [sessionId] = useState(() => Math.random().toString(36).substr(2, 9));
-  
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [selectedScheme, setSelectedScheme] = useState<keyof typeof COLOR_SCHEMES>('calmGreen');
+  const [conversationHistory, setConversationHistory] = useState<MindMapData[]>([]);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [error, setError] = useState<string>('');
 
-  const onConnect = useCallback(
-    (params: Connection) => setEdges((eds) => addEdge(params, eds)),
-    [setEdges]
-  );
+  const onConnect = useCallback((params: Connection | Edge) => {
+    setEdges((eds) => addEdge(params, eds));
+  }, [setEdges]);
 
-  const convertToReactFlowData = (data: MindMapData) => {
-    // Convert nodes
-    const flowNodes: Node[] = data.nodes.map((node, index) => ({
-      id: node.id,
-      type: 'default',
-      position: { 
-        x: node.category === 'root' ? 400 : (index % 3) * 300 + Math.random() * 100, 
-        y: node.category === 'root' ? 200 : Math.floor(index / 3) * 150 + Math.random() * 50 
-      },
-      data: { 
-        label: node.text
-      },
-      style: {
-        background: node.color || (
-          node.category === 'root' ? '#3b82f6' : 
-          node.category === 'main' ? '#dcfce7' : '#fed7aa'
-        ),
-        color: node.category === 'root' ? 'white' : '#374151',
-        border: `2px solid ${
-          node.category === 'root' ? '#2563eb' : 
-          node.category === 'main' ? '#16a34a' : '#ea580c'
-        }`,
-        borderRadius: '8px',
-        fontSize: node.category === 'root' ? '16px' : '14px',
-        fontWeight: node.category === 'root' ? 'bold' : '600',
-        padding: '8px 16px',
-        minWidth: '120px',
-        textAlign: 'center',
-      },
-    }));
-
-    // Convert edges
-    const flowEdges: Edge[] = data.connections.map((conn, index) => ({
-      id: `e${index}`,
-      source: conn.from,
-      target: conn.to,
-      type: 'smoothstep',
-      animated: true,
-      style: { 
-        stroke: '#6b7280', 
-        strokeWidth: 2,
-      },
-      markerEnd: {
-        type: MarkerType.ArrowClosed,
-        color: '#6b7280',
-      },
-    }));
-
-    return { nodes: flowNodes, edges: flowEdges };
-  };
-
-  useEffect(() => {
-    if (mindMapData) {
-      const { nodes: flowNodes, edges: flowEdges } = convertToReactFlowData(mindMapData);
-      setNodes(flowNodes);
-      setEdges(flowEdges);
-    }
-  }, [mindMapData, setNodes, setEdges]);
-
-  useEffect(() => {
-    trackUsage('tool_opened');
-  }, []);
-
-  const generateMindMap = async () => {
-    if (!input.trim()) {
-      setError('Please enter some thoughts or ideas to map');
-      return;
-    }
-
-    setLoading(true);
+  // Enhanced mind map generation
+  const generateMindMap = async (isEvolution = false) => {
+    if (!input.trim()) return;
+    
+    setIsLoading(true);
     setError('');
-    trackUsage('mind_map_generated');
 
     try {
+      const prompt = generateEnhancedPrompt(
+        input, 
+        isEvolution ? mindMapData?.nodes : [], 
+        selectedScheme
+      );
+
       const response = await fetch('/api/mind-map/generate', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          input: input.trim(),
-          sessionId
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          prompt,
+          isEvolution,
+          colorScheme: selectedScheme 
         }),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to generate mind map');
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const data = await response.json();
-      setMindMapData(data.mindMap);
+      const data: MindMapData = await response.json();
+      
+      // Update conversation history
+      setConversationHistory(prev => [...prev, data]);
+      
+      const { nodes: flowNodes, edges: flowEdges } = convertToReactFlowData(data, selectedScheme);
+      
+      setMindMapData(data);
+      setNodes(flowNodes);
+      setEdges(flowEdges);
+      setSuggestions(data.suggestions || []);
 
-    } catch (error) {
-      console.error('Mind map generation failed:', error);
-      setError('Failed to generate mind map. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const exportMindMap = async (format: 'png' | 'json') => {
-    if (!mindMapData) return;
-
-    trackUsage('mind_map_exported', { format });
-
-    try {
-      if (format === 'json') {
-        const dataStr = JSON.stringify(mindMapData, null, 2);
-        const dataBlob = new Blob([dataStr], { type: 'application/json' });
-        const url = URL.createObjectURL(dataBlob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `mindmap-${Date.now()}.json`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-      } else if (format === 'png') {
-        // For PNG export, you'd need to implement html-to-image or similar
-        // This is a basic implementation - can be enhanced
-        alert('PNG export feature will be implemented in the next version. Use JSON export for now.');
-      }
-    } catch (error) {
-      console.error('Export failed:', error);
-      alert('Export failed. Please try again.');
-    }
-  };
-
-  const trackUsage = async (action: string, metadata?: any) => {
-    try {
+      // Track analytics
       await fetch('/api/analytics/track', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          sessionId,
-          action,
-          metadata,
-          timestamp: new Date().toISOString()
+          event: 'mind_map_generated',
+          data: { 
+            nodeCount: flowNodes.length,
+            theme: selectedScheme,
+            isEvolution 
+          }
         }),
       });
+
     } catch (error) {
-      console.warn('Analytics tracking failed:', error);
+      console.error('Error generating mind map:', error);
+      setError('Failed to generate mind map. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
+  // Evolution function - adds to existing mind map
+  const evolveMindMap = () => {
+    generateMindMap(true);
+  };
+
+  // Export functions
+  const exportAsJSON = () => {
+    if (!mindMapData) return;
+    
+    const dataStr = JSON.stringify(mindMapData, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `mindmap-${Date.now()}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Clear function
   const clearMindMap = () => {
     setMindMapData(null);
-    setInput('');
-    setError('');
     setNodes([]);
     setEdges([]);
+    setInput('');
+    setSuggestions([]);
+    setError('');
+    setConversationHistory([]);
+  };
+
+  // Apply suggestion
+  const applySuggestion = (suggestion: string) => {
+    setInput(prev => prev ? `${prev}. ${suggestion}` : suggestion);
   };
 
   return (
     <>
       <Head>
-        <title>Free AI Mind Map Tool - Create Visual Mind Maps Instantly</title>
-        <meta name="description" content="Create beautiful mind maps instantly with AI assistance. Transform your thoughts into visual diagrams. Free online mind mapping tool with intelligent organization." />
-        <meta name="keywords" content="free mind map tool, AI mind mapping, online mind map creator, visual thinking tool, mind map generator" />
-        <link rel="canonical" href="https://mindmapflux.com/tool" />
-        
-        <script type="application/ld+json">
-          {JSON.stringify({
-            "@context": "https://schema.org",
-            "@type": "SoftwareApplication",
-            "name": "Mindmapflux AI Mind Map Tool",
-            "description": "Free AI-powered mind mapping tool for creating visual thought diagrams",
-            "applicationCategory": "ProductivityApplication",
-            "operatingSystem": "Web Browser",
-            "offers": {
-              "@type": "Offer",
-              "price": "0",
-              "priceCurrency": "USD"
-            },
-            "featureList": [
-              "AI-powered mind map generation",
-              "Interactive visual editing",
-              "Export to PNG and JSON",
-              "Real-time collaboration",
-              "No account required"
-            ]
-          })}
-        </script>
+        <title>AI Mind Map Generator - Mindmapflux</title>
+        <meta name="description" content="Generate intelligent, evolving mind maps with AI. Transform your thoughts into visual insights." />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <link rel="icon" href="/favicon.ico" />
       </Head>
 
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
         {/* Navigation */}
-        <nav className="bg-white border-b border-gray-200">
+        <nav className="bg-white shadow-sm border-b">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center h-16">
-              <Link href="/" className="text-2xl font-bold text-blue-600">
-                Mindmapflux
-              </Link>
-              <div className="hidden md:flex space-x-8">
-                <Link href="/how-it-works" className="text-gray-600 hover:text-blue-600 px-3 py-2 text-sm font-medium">
-                  How It Works
+            <div className="flex justify-between h-16">
+              <div className="flex items-center">
+                <Link href="/" className="flex items-center">
+                  <span className="ml-2 text-xl font-bold text-gray-900">Mindmapflux</span>
                 </Link>
-                <Link href="/mind-mapping-guide" className="text-gray-600 hover:text-blue-600 px-3 py-2 text-sm font-medium">
-                  Guide
-                </Link>
-                <Link href="/business-mind-mapping" className="text-gray-600 hover:text-blue-600 px-3 py-2 text-sm font-medium">
-                  Business
-                </Link>
-                <Link href="/about" className="text-gray-600 hover:text-blue-600 px-3 py-2 text-sm font-medium">
-                  About
-                </Link>
+              </div>
+              <div className="flex items-center space-x-4">
+                <Link href="/how-it-works" className="text-gray-600 hover:text-gray-900">How it Works</Link>
+                <Link href="/mind-mapping-guide" className="text-gray-600 hover:text-gray-900">Guide</Link>
               </div>
             </div>
           </div>
         </nav>
 
-        {/* Header */}
-        <section className="bg-gradient-to-r from-blue-50 to-purple-50 py-12">
-          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-            <h1 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
-              Free AI Mind Map Creator
+        <div className="max-w-7xl mx-auto px-4 py-8">
+          {/* Header */}
+          <div className="text-center mb-8">
+            <h1 className="text-4xl font-bold text-gray-900 mb-4">
+              AI Mind Map Generator
             </h1>
-            <p className="text-lg text-gray-600 mb-6">
-              Transform your thoughts into visual mind maps with AI assistance. 
-              No sign-up required - start organizing your ideas instantly.
+            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+              Transform your ideas into intelligent, evolving mind maps. Our AI understands context and creates comprehensive project blueprints.
             </p>
           </div>
-        </section>
 
-        {/* Main Tool Interface */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="grid lg:grid-cols-3 gap-8">
-            
-            {/* Input Panel */}
-            <div className="lg:col-span-1">
-              <div className="bg-white rounded-lg shadow-sm p-6 sticky top-8">
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                  Enter Your Thoughts
-                </h2>
-                
+          {/* Controls */}
+          <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Input Section */}
+              <div className="lg:col-span-2">
+                <label htmlFor="input" className="block text-sm font-medium text-gray-700 mb-2">
+                  Describe your idea, project, or topic:
+                </label>
                 <textarea
+                  id="input"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder="Describe your ideas, project, or problem here... 
-
-Example: 'I want to start an online business selling courses. Need to figure out target audience, competition, pricing, marketing strategies, content creation, and technical platform..'"
-                  rows={12}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                  placeholder="e.g., 'I want to start an online business selling handmade jewelry. Need to figure out target customers, marketing strategy, pricing, logistics, and legal requirements.'"
+                  className="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                  rows={4}
                 />
-
-                <div className="mt-6 space-y-3">
+                
+                <div className="flex flex-wrap gap-2 mt-4">
                   <button
-                    onClick={generateMindMap}
-                    disabled={loading || !input.trim()}
-                    className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                    onClick={() => generateMindMap(false)}
+                    disabled={isLoading || !input.trim()}
+                    className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
                   >
-                    {loading ? (
-                      <>
-                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        Generating Mind Map...
-                      </>
-                    ) : (
-                      '🧠 Generate Mind Map'
-                    )}
+                    {isLoading ? 'Generating...' : 'Generate Mind Map'}
                   </button>
-
+                  
                   {mindMapData && (
                     <button
-                      onClick={clearMindMap}
-                      className="w-full bg-gray-600 text-white py-2 px-4 rounded-lg font-semibold hover:bg-gray-700"
+                      onClick={evolveMindMap}
+                      disabled={isLoading || !input.trim()}
+                      className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 disabled:bg-gray-400"
                     >
-                      Clear & Start Over
+                      Evolve Map
                     </button>
                   )}
-                </div>
-
-                {error && (
-                  <div className="mt-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-                    {error}
-                  </div>
-                )}
-
-                {/* Example Ideas */}
-                <div className="mt-8">
-                  <h3 className="text-sm font-semibold text-gray-900 mb-3">Example Ideas to Try:</h3>
-                  <div className="space-y-2">
-                    {[
-                      'Plan a product launch strategy',
-                      'Organize a research project',
-                      'Design a marketing campaign',
-                      'Plan a career transition',
-                      'Brainstorm app features'
-                    ].map((example, index) => (
-                      <button
-                        key={index}
-                        onClick={() => setInput(example)}
-                        className="block w-full text-left text-sm text-blue-600 hover:text-blue-800 py-1"
-                      >
-                        • {example}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Mind Map Visualization */}
-            <div className="lg:col-span-2">
-              <div className="bg-white rounded-lg shadow-sm">
-                {/* Toolbar */}
-                {mindMapData && (
-                  <div className="border-b border-gray-200 p-4">
-                    <div className="flex justify-between items-center">
-                      <h3 className="text-lg font-semibold text-gray-900">
-                        {mindMapData.title}
-                      </h3>
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={() => exportMindMap('json')}
-                          className="bg-purple-600 text-white px-3 py-1 rounded text-sm hover:bg-purple-700"
-                        >
-                          💾 Export Data
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* React Flow Container */}
-                <div className="relative">
-                  <div 
-                    className="w-full h-96 lg:h-[600px] border-2 border-dashed border-gray-200 rounded-lg"
-                    style={{ backgroundColor: '#fafafa' }}
+                  
+                  <button
+                    onClick={clearMindMap}
+                    className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700"
                   >
-                    {nodes.length > 0 ? (
-                      <ReactFlow
-                        nodes={nodes}
-                        edges={edges}
-                        onNodesChange={onNodesChange}
-                        onEdgesChange={onEdgesChange}
-                        onConnect={onConnect}
-                        fitView
-                        attributionPosition="bottom-left"
-                      >
-                        <Controls />
-                        <MiniMap 
-                          nodeColor={(node) => {
-                            if (node.style?.background) return node.style.background as string;
-                            return '#e5e7eb';
-                          }}
-                        />
-                        <Background />
-                      </ReactFlow>
-                    ) : (
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="text-center text-gray-500">
-                          <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                          </svg>
-                          <h3 className="text-lg font-medium mb-2">Your Mind Map Will Appear Here</h3>
-                          <p className="text-sm">Enter your thoughts in the panel and click "Generate Mind Map"</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                    Clear
+                  </button>
                 </div>
               </div>
 
-              {/* Instructions */}
-              {mindMapData && (
-                <div className="mt-6 bg-blue-50 p-4 rounded-lg">
-                  <h4 className="font-semibold text-blue-900 mb-2">💡 How to Use Your Mind Map:</h4>
-                  <ul className="text-sm text-blue-800 space-y-1">
-                    <li>• Click and drag nodes to rearrange them</li>
-                    <li>• Use the controls in the bottom left to zoom and pan</li>
-                    <li>• View the mini-map to see the full structure</li>
-                    <li>• Use the export button to save your work</li>
-                    <li>• Add new ideas in the input panel to expand your map</li>
-                  </ul>
-                </div>
-              )}
+              {/* Color Scheme Selector */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Color Theme:
+                </label>
+                <select
+                  value={selectedScheme}
+                  onChange={(e) => setSelectedScheme(e.target.value as keyof typeof COLOR_SCHEMES)}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  {Object.entries(COLOR_SCHEMES).map(([key, scheme]) => (
+                    <option key={key} value={key}>
+                      {scheme.name}
+                    </option>
+                  ))}
+                </select>
+
+                {/* Export Options */}
+                {mindMapData && (
+                  <div className="mt-4">
+                    <button
+                      onClick={exportAsJSON}
+                      className="w-full bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 mb-2"
+                    >
+                      Export JSON
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
+
+            {/* Error Display */}
+            {error && (
+              <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-red-700">{error}</p>
+              </div>
+            )}
+
+            {/* Suggestions */}
+            {suggestions.length > 0 && (
+              <div className="mt-6">
+                <h3 className="text-sm font-medium text-gray-700 mb-3">AI Suggestions for expansion:</h3>
+                <div className="flex flex-wrap gap-2">
+                  {suggestions.map((suggestion, index) => (
+                    <button
+                      key={index}
+                      onClick={() => applySuggestion(suggestion)}
+                      className="text-sm bg-blue-50 text-blue-700 px-3 py-1 rounded-full hover:bg-blue-100 border border-blue-200"
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Features Section */}
-          <section className="mt-16 py-12 bg-white rounded-lg shadow-sm">
-            <div className="max-w-4xl mx-auto px-6 text-center">
-              <h2 className="text-2xl font-bold text-gray-900 mb-8">
-                Why Choose Our AI Mind Map Tool?
-              </h2>
-              
-              <div className="grid md:grid-cols-3 gap-8">
-                <div>
-                  <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mx-auto mb-4">
-                    <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                  </div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">AI-Powered</h3>
-                  <p className="text-gray-600 text-sm">
-                    Our AI understands your thoughts and automatically creates logical connections and hierarchies.
-                  </p>
-                </div>
-
-                <div>
-                  <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mx-auto mb-4">
-                    <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                    </svg>
-                  </div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">100% Free</h3>
-                  <p className="text-gray-600 text-sm">
-                    No sign-up required, no hidden costs. Create unlimited mind maps completely free.
-                  </p>
-                </div>
-
-                <div>
-                  <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mx-auto mb-4">
-                    <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                    </svg>
-                  </div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Export Ready</h3>
-                  <p className="text-gray-600 text-sm">
-                    Download your mind maps as data files to use in presentations and documents.
-                  </p>
+          {/* Mind Map Visualization */}
+          <div className="bg-white rounded-lg shadow-md" style={{ height: '600px' }}>
+            {mindMapData ? (
+              <ReactFlow
+                nodes={nodes}
+                edges={edges}
+                onNodesChange={onNodesChange}
+                onEdgesChange={onEdgesChange}
+                onConnect={onConnect}
+                fitView
+                attributionPosition="bottom-left"
+              >
+                <Controls />
+                <MiniMap 
+                  nodeColor={(node) => {
+                    const bgColor = node.style?.backgroundColor || '#6B8857';
+                    return typeof bgColor === 'string' ? bgColor : '#6B8857';
+                  }}
+                  maskColor="rgba(0,0,0,0.1)"
+                />
+                <Background />
+              </ReactFlow>
+            ) : (
+              <div className="h-full flex items-center justify-center text-gray-500">
+                <div className="text-center">
+                  <div className="text-6xl mb-4">🧠</div>
+                  <h3 className="text-xl font-semibold mb-2">Ready to map your thoughts?</h3>
+                  <p>Enter your idea above and watch it transform into an intelligent mind map.</p>
                 </div>
               </div>
+            )}
+          </div>
+
+          {/* Context Display */}
+          {mindMapData?.context && (
+            <div className="mt-6 bg-white rounded-lg shadow-md p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-3">AI Analysis</h3>
+              <p className="text-gray-700">{mindMapData.context}</p>
             </div>
-          </section>
+          )}
         </div>
-
-        {/* Footer */}
-        <footer className="bg-gray-900 text-white py-12 mt-16">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="grid md:grid-cols-4 gap-8">
-              <div>
-                <h3 className="text-xl font-bold mb-4">Mindmapflux</h3>
-                <p className="text-gray-400">
-                  AI-powered mind mapping for better thinking and business ideation.
-                </p>
-              </div>
-              
-              <div>
-                <h4 className="text-lg font-semibold mb-4">Tools</h4>
-                <ul className="space-y-2 text-gray-400">
-                  <li><Link href="/tool" className="hover:text-white">Mind Map Creator</Link></li>
-                  <li><Link href="/business-mind-mapping" className="hover:text-white">Business Templates</Link></li>
-                  <li><Link href="/how-it-works" className="hover:text-white">How It Works</Link></li>
-                </ul>
-              </div>
-              
-              <div>
-                <h4 className="text-lg font-semibold mb-4">Learn</h4>
-                <ul className="space-y-2 text-gray-400">
-                  <li><Link href="/mind-mapping-guide" className="hover:text-white">Mind Mapping Guide</Link></li>
-                  <li><Link href="/business-ideation-techniques" className="hover:text-white">Business Ideation</Link></li>
-                  <li><Link href="/creative-thinking-methods" className="hover:text-white">Creative Thinking</Link></li>
-                </ul>
-              </div>
-              
-              <div>
-                <h4 className="text-lg font-semibold mb-4">Company</h4>
-                <ul className="space-y-2 text-gray-400">
-                  <li><Link href="/about" className="hover:text-white">About</Link></li>
-                  <li><Link href="/privacy" className="hover:text-white">Privacy Policy</Link></li>
-                  <li><Link href="/terms" className="hover:text-white">Terms of Service</Link></li>
-                </ul>
-              </div>
-            </div>
-            
-            <div className="border-t border-gray-800 mt-12 pt-8 text-center text-gray-400">
-              <p>&copy; 2025 Mindmapflux. All rights reserved.</p>
-            </div>
-          </div>
-        </footer>
       </div>
     </>
   );
