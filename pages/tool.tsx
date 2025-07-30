@@ -15,8 +15,14 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 import { MINDMAP_COLOR_SCHEMES } from '../utils/colorSchemes';
 
+interface MindMapNode {
+  id: string;
+  label: string;
+  type: string;
+}
+
 interface MindMapData {
-  nodes: Node[];
+  nodes: MindMapNode[];
   connections: { from: string; to: string }[];
   analysis: string;
   suggestions: string[];
