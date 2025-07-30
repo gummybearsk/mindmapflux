@@ -307,7 +307,7 @@ export default function Tool() {
                         : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
                     }`}
                     style={{ 
-                      backgroundColor: selectedColorScheme === key ? scheme.light : undefined,
+                      backgroundColor: selectedColorScheme === key ? scheme.background : undefined,
                       borderColor: selectedColorScheme === key ? scheme.primary : undefined 
                     }}
                   >
