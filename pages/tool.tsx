@@ -1,7 +1,20 @@
-// pages/tool.tsx
-import { useState, useEffect, useRef } from 'react';
+// pages/tool.tsx - React Flow Version (100% FREE & BEAUTIFUL)
+import { useState, useEffect, useCallback } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
+import ReactFlow, {
+  MiniMap,
+  Controls,
+  Background,
+  useNodesState,
+  useEdgesState,
+  addEdge,
+  Node,
+  Edge,
+  Connection,
+  MarkerType,
+} from 'reactflow';
+import 'reactflow/dist/style.css';
 
 interface MindMapNode {
   id: string;
@@ -9,8 +22,6 @@ interface MindMapNode {
   category?: string;
   color?: string;
   parent?: string;
-  x?: number;
-  y?: number;
 }
 
 interface MindMapData {
@@ -19,144 +30,103 @@ interface MindMapData {
   connections: Array<{ from: string; to: string }>;
 }
 
+// Custom node styles for different categories
+const nodeTypes = {
+  default: ({ data }: any) => (
+    <div 
+      className={`px-4 py-2 shadow-lg rounded-lg border-2 min-w-[120px] text-center ${
+        data.category === 'root' 
+          ? 'bg-blue-500 text-white border-blue-600 font-bold text-lg' 
+          : data.category === 'main'
+          ? 'bg-green-100 text-green-800 border-green-300 font-semibold'
+          : 'bg-orange-50 text-orange-700 border-orange-200'
+      }`}
+      style={{ backgroundColor: data.color || undefined }}
+    >
+      <div className="font-medium">{data.label}</div>
+    </div>
+  ),
+};
+
 export default function MindMapTool() {
   const [input, setInput] = useState('');
   const [mindMapData, setMindMapData] = useState<MindMapData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [sessionId] = useState(() => Math.random().toString(36).substr(2, 9));
-  const diagramRef = useRef<HTMLDivElement>(null);
-  const goJSRef = useRef<any>(null);
+  
+  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+
+  const onConnect = useCallback(
+    (params: Connection) => setEdges((eds) => addEdge(params, eds)),
+    [setEdges]
+  );
+
+  const convertToReactFlowData = (data: MindMapData) => {
+    // Convert nodes
+    const flowNodes: Node[] = data.nodes.map((node, index) => ({
+      id: node.id,
+      type: 'default',
+      position: { 
+        x: node.category === 'root' ? 400 : (index % 3) * 300 + Math.random() * 100, 
+        y: node.category === 'root' ? 200 : Math.floor(index / 3) * 150 + Math.random() * 50 
+      },
+      data: { 
+        label: node.text, 
+        category: node.category,
+        color: node.color 
+      },
+      style: {
+        background: node.color || (
+          node.category === 'root' ? '#3b82f6' : 
+          node.category === 'main' ? '#dcfce7' : '#fed7aa'
+        ),
+        color: node.category === 'root' ? 'white' : '#374151',
+        border: `2px solid ${
+          node.category === 'root' ? '#2563eb' : 
+          node.category === 'main' ? '#16a34a' : '#ea580c'
+        }`,
+        borderRadius: '8px',
+        fontSize: node.category === 'root' ? '16px' : '14px',
+        fontWeight: node.category === 'root' ? 'bold' : 'semibold',
+        padding: '8px 16px',
+        minWidth: '120px',
+        textAlign: 'center',
+      },
+    }));
+
+    // Convert edges
+    const flowEdges: Edge[] = data.connections.map((conn, index) => ({
+      id: `e${index}`,
+      source: conn.from,
+      target: conn.to,
+      type: 'smoothstep',
+      animated: true,
+      style: { 
+        stroke: '#6b7280', 
+        strokeWidth: 2,
+      },
+      markerEnd: {
+        type: MarkerType.ArrowClosed,
+        color: '#6b7280',
+      },
+    }));
+
+    return { nodes: flowNodes, edges: flowEdges };
+  };
 
   useEffect(() => {
-    // Initialize GoJS when component mounts
-    initializeGoJS();
-    
-    // Track tool usage
+    if (mindMapData) {
+      const { nodes: flowNodes, edges: flowEdges } = convertToReactFlowData(mindMapData);
+      setNodes(flowNodes);
+      setEdges(flowEdges);
+    }
+  }, [mindMapData, setNodes, setEdges]);
+
+  useEffect(() => {
     trackUsage('tool_opened');
   }, []);
-
-  useEffect(() => {
-    if (mindMapData && goJSRef.current) {
-      updateDiagram(mindMapData);
-    }
-  }, [mindMapData]);
-
-  const initializeGoJS = async () => {
-    try {
-      // Load GoJS library
-      const go = await import('gojs');
-      
-      if (!diagramRef.current) return;
-
-      const $ = go.GraphObject.make;
-      
-      // Create diagram
-      const diagram = $(go.Diagram, diagramRef.current, {
-        'undoManager.isEnabled': true,
-        layout: $(go.TreeLayout, {
-          angle: 0,
-          layerSpacing: 35,
-          nodeSpacing: 10,
-          arrangement: go.TreeLayout.ArrangementHorizontal
-        }),
-        initialContentAlignment: go.Spot.Center,
-        'toolManager.hoverDelay': 100,
-        allowDrop: true,
-        'animationManager.isEnabled': false
-      });
-
-      // Define node template
-      diagram.nodeTemplate = $(
-        go.Node,
-        'Auto',
-        {
-          selectionAdorned: false,
-          shadowOffset: new go.Point(0, 2),
-          shadowBlur: 10,
-          shadowColor: 'rgba(0,0,0,0.1)'
-        },
-        new go.Binding('location', 'loc', go.Point.parse).makeTwoWay(go.Point.stringify),
-        $(
-          go.Shape,
-          'RoundedRectangle',
-          {
-            fill: '#ffffff',
-            stroke: '#3b82f6',
-            strokeWidth: 2,
-            parameter1: 10
-          },
-          new go.Binding('fill', 'color')
-        ),
-        $(
-          go.TextBlock,
-          {
-            margin: new go.Margin(8, 12),
-            font: '14px -apple-system, BlinkMacSystemFont, sans-serif',
-            stroke: '#1f2937',
-            maxSize: new go.Size(150, NaN),
-            wrap: go.TextBlock.WrapFit,
-            editable: true
-          },
-          new go.Binding('text').makeTwoWay()
-        )
-      );
-
-      // Define link template
-      diagram.linkTemplate = $(
-        go.Link,
-        {
-          routing: go.Link.Orthogonal,
-          corner: 5,
-          selectionAdorned: false
-        },
-        $(
-          go.Shape,
-          {
-            stroke: '#6b7280',
-            strokeWidth: 2
-          }
-        ),
-        $(
-          go.Shape,
-          {
-            toArrow: 'Standard',
-            stroke: '#6b7280',
-            fill: '#6b7280'
-          }
-        )
-      );
-
-      // Store both diagram and go reference
-      goJSRef.current = { diagram, go };
-
-    } catch (error) {
-      console.error('Failed to initialize GoJS:', error);
-      setError('Failed to initialize mind map visualization');
-    }
-  };
-
-  const updateDiagram = (data: MindMapData) => {
-    if (!goJSRef.current) return;
-
-    const { diagram, go } = goJSRef.current;
-    
-    // Convert our data to GoJS format
-    const nodeDataArray = data.nodes.map(node => ({
-      key: node.id,
-      text: node.text,
-      color: node.color || '#e5f3ff',
-      category: node.category
-    }));
-
-    const linkDataArray = data.connections.map(conn => ({
-      from: conn.from,
-      to: conn.to
-    }));
-
-    // FIXED: Now using the correct go reference
-    diagram.model = new go.GraphLinksModel(nodeDataArray, linkDataArray);
-  };
 
   const generateMindMap = async () => {
     if (!input.trim()) {
@@ -195,14 +165,13 @@ export default function MindMapTool() {
     }
   };
 
-  const exportMindMap = async (format: 'png' | 'pdf' | 'json') => {
+  const exportMindMap = async (format: 'png' | 'json') => {
     if (!mindMapData) return;
 
     trackUsage('mind_map_exported', { format });
 
     try {
       if (format === 'json') {
-        // Download JSON file
         const dataStr = JSON.stringify(mindMapData, null, 2);
         const dataBlob = new Blob([dataStr], { type: 'application/json' });
         const url = URL.createObjectURL(dataBlob);
@@ -213,23 +182,10 @@ export default function MindMapTool() {
         link.click();
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
-      } else if (format === 'png' && goJSRef.current) {
-        // Export diagram as PNG
-        const { diagram } = goJSRef.current;
-        const imgData = diagram.makeImageData({
-          background: 'white',
-          returnType: 'blob',
-          callback: (blob: Blob) => {
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `mindmap-${Date.now()}.png`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-          }
-        });
+      } else if (format === 'png') {
+        // For PNG export, you'd need to implement html-to-image or similar
+        // This is a basic implementation - can be enhanced
+        alert('PNG export feature will be implemented in the next version. Use JSON export for now.');
       }
     } catch (error) {
       console.error('Export failed:', error);
@@ -250,7 +206,6 @@ export default function MindMapTool() {
         }),
       });
     } catch (error) {
-      // Silently fail analytics tracking
       console.warn('Analytics tracking failed:', error);
     }
   };
@@ -259,9 +214,8 @@ export default function MindMapTool() {
     setMindMapData(null);
     setInput('');
     setError('');
-    if (goJSRef.current && goJSRef.current.diagram) {
-      goJSRef.current.diagram.clear();
-    }
+    setNodes([]);
+    setEdges([]);
   };
 
   return (
@@ -427,12 +381,6 @@ Example: 'I want to start an online business selling courses. Need to figure out
                       </h3>
                       <div className="flex space-x-2">
                         <button
-                          onClick={() => exportMindMap('png')}
-                          className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700"
-                        >
-                          📸 Export PNG
-                        </button>
-                        <button
                           onClick={() => exportMindMap('json')}
                           className="bg-purple-600 text-white px-3 py-1 rounded text-sm hover:bg-purple-700"
                         >
@@ -443,25 +391,45 @@ Example: 'I want to start an online business selling courses. Need to figure out
                   </div>
                 )}
 
-                {/* Diagram Container */}
+                {/* React Flow Container */}
                 <div className="relative">
-                  <div
-                    ref={diagramRef}
+                  <div 
                     className="w-full h-96 lg:h-[600px] border-2 border-dashed border-gray-200 rounded-lg"
                     style={{ backgroundColor: '#fafafa' }}
-                  />
-                  
-                  {!mindMapData && !loading && (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="text-center text-gray-500">
-                        <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                        </svg>
-                        <h3 className="text-lg font-medium mb-2">Your Mind Map Will Appear Here</h3>
-                        <p className="text-sm">Enter your thoughts in the panel and click "Generate Mind Map"</p>
+                  >
+                    {nodes.length > 0 ? (
+                      <ReactFlow
+                        nodes={nodes}
+                        edges={edges}
+                        onNodesChange={onNodesChange}
+                        onEdgesChange={onEdgesChange}
+                        onConnect={onConnect}
+                        nodeTypes={nodeTypes}
+                        fitView
+                        attributionPosition="bottom-left"
+                      >
+                        <Controls />
+                        <MiniMap 
+                          nodeColor={(node) => {
+                            if (node.data?.category === 'root') return '#3b82f6';
+                            if (node.data?.category === 'main') return '#16a34a';
+                            return '#ea580c';
+                          }}
+                        />
+                        <Background variant="dots" gap={12} size={1} />
+                      </ReactFlow>
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="text-center text-gray-500">
+                          <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                          </svg>
+                          <h3 className="text-lg font-medium mb-2">Your Mind Map Will Appear Here</h3>
+                          <p className="text-sm">Enter your thoughts in the panel and click "Generate Mind Map"</p>
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -471,9 +439,9 @@ Example: 'I want to start an online business selling courses. Need to figure out
                   <h4 className="font-semibold text-blue-900 mb-2">💡 How to Use Your Mind Map:</h4>
                   <ul className="text-sm text-blue-800 space-y-1">
                     <li>• Click and drag nodes to rearrange them</li>
-                    <li>• Double-click any text to edit it</li>
-                    <li>• Use the export buttons to save your work</li>
-                    <li>• Zoom in/out using your mouse wheel</li>
+                    <li>• Use the controls in the bottom left to zoom and pan</li>
+                    <li>• View the mini-map to see the full structure</li>
+                    <li>• Use the export button to save your work</li>
                     <li>• Add new ideas in the input panel to expand your map</li>
                   </ul>
                 </div>
@@ -521,7 +489,7 @@ Example: 'I want to start an online business selling courses. Need to figure out
                   </div>
                   <h3 className="text-lg font-semibold text-gray-900 mb-2">Export Ready</h3>
                   <p className="text-gray-600 text-sm">
-                    Download your mind maps as images or data files to use in presentations and documents.
+                    Download your mind maps as data files to use in presentations and documents.
                   </p>
                 </div>
               </div>
