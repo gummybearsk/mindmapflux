@@ -30,24 +30,6 @@ interface MindMapData {
   connections: Array<{ from: string; to: string }>;
 }
 
-// Custom node styles for different categories
-const nodeTypes = {
-  default: ({ data }: any) => (
-    <div 
-      className={`px-4 py-2 shadow-lg rounded-lg border-2 min-w-[120px] text-center ${
-        data.category === 'root' 
-          ? 'bg-blue-500 text-white border-blue-600 font-bold text-lg' 
-          : data.category === 'main'
-          ? 'bg-green-100 text-green-800 border-green-300 font-semibold'
-          : 'bg-orange-50 text-orange-700 border-orange-200'
-      }`}
-      style={{ backgroundColor: data.color || undefined }}
-    >
-      <div className="font-medium">{data.label}</div>
-    </div>
-  ),
-};
-
 export default function MindMapTool() {
   const [input, setInput] = useState('');
   const [mindMapData, setMindMapData] = useState<MindMapData | null>(null);
@@ -73,9 +55,7 @@ export default function MindMapTool() {
         y: node.category === 'root' ? 200 : Math.floor(index / 3) * 150 + Math.random() * 50 
       },
       data: { 
-        label: node.text, 
-        category: node.category,
-        color: node.color 
+        label: node.text
       },
       style: {
         background: node.color || (
@@ -89,7 +69,7 @@ export default function MindMapTool() {
         }`,
         borderRadius: '8px',
         fontSize: node.category === 'root' ? '16px' : '14px',
-        fontWeight: node.category === 'root' ? 'bold' : 'semibold',
+        fontWeight: node.category === 'root' ? 'bold' : '600',
         padding: '8px 16px',
         minWidth: '120px',
         textAlign: 'center',
@@ -404,19 +384,17 @@ Example: 'I want to start an online business selling courses. Need to figure out
                         onNodesChange={onNodesChange}
                         onEdgesChange={onEdgesChange}
                         onConnect={onConnect}
-                        nodeTypes={nodeTypes}
                         fitView
                         attributionPosition="bottom-left"
                       >
                         <Controls />
                         <MiniMap 
                           nodeColor={(node) => {
-                            if (node.data?.category === 'root') return '#3b82f6';
-                            if (node.data?.category === 'main') return '#16a34a';
-                            return '#ea580c';
+                            if (node.style?.background) return node.style.background as string;
+                            return '#e5e7eb';
                           }}
                         />
-                        <Background variant="dots" gap={12} size={1} />
+                        <Background variant={2} gap={12} size={1} />
                       </ReactFlow>
                     ) : (
                       <div className="absolute inset-0 flex items-center justify-center">
