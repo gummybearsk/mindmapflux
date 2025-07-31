@@ -398,7 +398,8 @@ export default function IntelligentTool() {
     minDistance: number
   ): { x: number; y: number } => {
     const isPositionFree = (pos: { x: number; y: number }) => {
-      for (const existingPos of existingPositions.values()) {
+      const existingPositionsArray = Array.from(existingPositions.values());
+      for (const existingPos of existingPositionsArray) {
         const distance = Math.sqrt(
           Math.pow(pos.x - existingPos.x, 2) + Math.pow(pos.y - existingPos.y, 2)
         );
