@@ -476,25 +476,28 @@ export default function IntelligentTool() {
         const position = positions.get(node.id) || { x: 0, y: 0 };
         const backgroundColor = assignBranchColor(node, mindMapData.nodes, mindMapData.connections, index);
         
-        // PROBLEM 4, 10: Determine appropriate node size based on importance and type
+        // FIXED: Appropriate node size - not too big, proper text fit
         const connections = mindMapData.connections?.filter(c => c.from === node.id || c.to === node.id) || [];
         const importance = connections.length + (node.semantic_weight || 1);
         
-        let fontSize = '14px';
+        let fontSize = '12px';
         let fontWeight = 'normal';
-        let minWidth = '120px';
-        let padding = '12px 16px';
+        let minWidth = 'auto';
+        let padding = '8px 12px';
+        let maxWidth = '200px';
         
         if (node.type === 'center' || importance >= 5) {
-          fontSize = '18px';
+          fontSize = '14px';
           fontWeight = 'bold';
-          minWidth = '160px';
-          padding = '16px 24px';
+          minWidth = 'auto';
+          padding = '10px 16px';
+          maxWidth = '220px';
         } else if (node.type === 'main' || importance >= 3) {
-          fontSize = '16px';
+          fontSize = '13px';
           fontWeight = '600';
-          minWidth = '140px';
-          padding = '14px 20px';
+          minWidth = 'auto';
+          padding = '9px 14px';
+          maxWidth = '210px';
         }
 
         return {
@@ -512,20 +515,25 @@ export default function IntelligentTool() {
           style: {
             background: backgroundColor,
             color: 'white',
-            border: selectedNodeId === node.id ? '3px solid #FFD700' : 'none',
-            borderRadius: '12px',
+            border: selectedNodeId === node.id ? '2px solid #FFD700' : 'none',
+            borderRadius: '8px',
             padding,
             fontSize,
             fontWeight,
             minWidth,
+            maxWidth,
             textAlign: 'center' as const,
             wordWrap: 'break-word' as const,
             boxShadow: selectedNodeId === node.id 
-              ? '0 6px 16px rgba(255,215,0,0.4)' 
-              : '0 4px 12px rgba(0,0,0,0.2)',
-            cursor: 'pointer',
-            whiteSpace: 'pre-wrap',
-            lineHeight: '1.4'
+              ? '0 4px 12px rgba(255,215,0,0.4)' 
+              : '0 2px 6px rgba(0,0,0,0.15)',
+            cursor: 'grab',
+            whiteSpace: 'normal',
+            lineHeight: '1.3',
+            overflow: 'hidden',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
           },
           draggable: true
         };
@@ -810,52 +818,52 @@ export default function IntelligentTool() {
           </nav>
         )}
 
-        {/* PROBLEM 33: Fullscreen Input Box with toggle visibility */}
+        {/* PROBLEM 33: Fullscreen Input Box with better UX */}
         {isFullscreen && currentStep === 'complete' && showFullscreenInput && (
-          <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 bg-white p-4 rounded-lg shadow-lg border max-w-md w-full mx-4">
-            <div className="mb-3">
+          <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 bg-white p-6 rounded-lg shadow-xl border max-w-lg w-full mx-4">
+            <div className="mb-4">
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder={selectedNodeId ? "Continue evolving this node..." : "Continue evolving your mind map..."}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                rows={2}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none text-sm"
+                rows={3}
                 onKeyPress={(e) => e.key === 'Enter' && e.shiftKey === false && (e.preventDefault(), generateIntelligentMindMap(true))}
               />
               {selectedNodeId && (
-                <p className="text-xs text-blue-600 mt-1">
+                <p className="text-xs text-blue-600 mt-2">
                   🎯 Focused on: {nodes.find(n => n.id === selectedNodeId)?.data?.label}
                 </p>
               )}
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 mb-4">
               <button
                 onClick={() => generateIntelligentMindMap(true)}
                 disabled={!input.trim()}
-                className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 text-sm"
+                className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm transition-colors"
               >
-                Continue
+                Continue Evolution
               </button>
               <button
                 onClick={() => setSelectedNodeId(null)}
-                className="bg-gray-600 text-white px-3 py-2 rounded-md hover:bg-gray-700 text-sm"
+                className="bg-gray-600 text-white px-3 py-2 rounded-lg hover:bg-gray-700 text-sm"
                 title="Clear selection"
               >
                 🎯
               </button>
             </div>
-            {/* PROBLEM 33: Compressed AI Suggestions in Fullscreen */}
+            {/* FIXED: Complete AI Suggestions - no truncation */}
             {suggestions.length > 0 && (
-              <div className="mt-3 p-2 bg-blue-50 rounded-md">
-                <p className="text-xs font-medium text-blue-900 mb-1">💡 Quick suggestions:</p>
-                <div className="flex flex-wrap gap-1">
-                  {suggestions.slice(0, 3).map((suggestion, index) => (
+              <div className="p-3 bg-blue-50 rounded-lg max-h-40 overflow-y-auto">
+                <p className="text-sm font-medium text-blue-900 mb-2">💡 AI Suggestions:</p>
+                <div className="space-y-2">
+                  {suggestions.slice(0, 4).map((suggestion, index) => (
                     <button
                       key={index}
                       onClick={() => setInput(suggestion)}
-                      className="text-xs bg-white px-2 py-1 rounded border hover:bg-blue-50 transition-colors"
+                      className="w-full text-left text-xs bg-white px-3 py-2 rounded border hover:bg-blue-50 transition-colors"
                     >
-                      {suggestion.substring(0, 20)}...
+                      {suggestion}
                     </button>
                   ))}
                 </div>
@@ -1018,16 +1026,16 @@ export default function IntelligentTool() {
                       </div>
                     </div>
 
-                    {/* AI Suggestions under buttons (not under mind map) */}
+                    {/* FIXED: Complete AI Suggestions - no truncation, full text visible */}
                     {suggestions.length > 0 && (
                       <div className="p-4 bg-blue-50 rounded-lg">
                         <h3 className="text-lg font-medium text-blue-900 mb-3">💡 AI Expansion Suggestions</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <div className="space-y-2">
                           {suggestions.map((suggestion, index) => (
                             <button
                               key={index}
                               onClick={() => setInput(suggestion)}
-                              className="text-left p-3 bg-white rounded border hover:bg-blue-50 hover:border-blue-300 transition-colors"
+                              className="w-full text-left p-3 bg-white rounded border hover:bg-blue-50 hover:border-blue-300 transition-colors"
                             >
                               <span className="text-sm text-gray-700">{suggestion}</span>
                             </button>
@@ -1049,11 +1057,16 @@ export default function IntelligentTool() {
                       onNodesChange={onNodesChange}
                       onEdgesChange={onEdgesChange}
                       onNodeClick={handleNodeClick}
+                      onNodeDrag={(event, node) => {
+                        // Ensure dragging works properly
+                        console.log('Dragging node:', node.data?.label);
+                      }}
                       fitView
                       fitViewOptions={{ padding: 0.2 }}
                       nodesDraggable={true}
                       nodesConnectable={false}
                       elementsSelectable={true}
+                      nodeOrigin={[0.5, 0.5] as [number, number]}
                     >
                       <Controls />
                       <MiniMap />
