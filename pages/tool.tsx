@@ -254,59 +254,96 @@ const assignBranchColor = (
     return BRANCH_COLOR_SYSTEM.primary.color;
   }
   
-  // Center/primary nodes always get primary color
-  if (node.type === 'main' && !connections.some(c => c.to === node.id)) {
-    return BRANCH_COLOR_SYSTEM.primary.color;
+  // Debug logging to understand the structure
+  console.log('Assigning color for node:', node.id, node.label, node.type);
+  
+  // Find all root nodes (nodes with no incoming connections)
+  const rootNodes = allNodes.filter(n => !connections.some(c => c.to === n.id));
+  console.log('Root nodes found:', rootNodes.map(n => ({ id: n.id, label: n.label })));
+  
+  // If this is a root node, assign branch colors
+  if (rootNodes.some(root => root.id === node.id)) {
+    const rootIndex = rootNodes.findIndex(root => root.id === node.id);
+    console.log('Root node index:', rootIndex);
+    
+    if (rootIndex === 0) {
+      // First root gets primary color (center)
+      return BRANCH_COLOR_SYSTEM.primary.color;
+    } else {
+      // Other roots get branch colors
+      const branchIndex = rootIndex - 1;
+      if (branchIndex < BRANCH_COLOR_SYSTEM.priority.length) {
+        const color = BRANCH_COLOR_SYSTEM.priority[branchIndex].color;
+        console.log('Assigned priority color:', color, BRANCH_COLOR_SYSTEM.priority[branchIndex].name);
+        return color;
+      } else {
+        const additionalIndex = (branchIndex - BRANCH_COLOR_SYSTEM.priority.length) % BRANCH_COLOR_SYSTEM.additional.length;
+        const color = BRANCH_COLOR_SYSTEM.additional[additionalIndex].color;
+        console.log('Assigned additional color:', color, BRANCH_COLOR_SYSTEM.additional[additionalIndex].name);
+        return color;
+      }
+    }
   }
-
-  // Find which main branch this node belongs to
-  const findMainBranch = (nodeId: string, visited = new Set<string>()): string | null => {
+  
+  // For non-root nodes, find their root parent and inherit color family
+  const findRootParent = (nodeId: string, visited = new Set<string>()): string | null => {
     if (visited.has(nodeId)) return null;
     visited.add(nodeId);
     
     const parentConnection = connections.find(c => c.to === nodeId);
-    if (!parentConnection) return nodeId; // This is a root node
+    if (!parentConnection) return nodeId; // This is a root
     
     const parentNode = allNodes.find(n => n.id === parentConnection.from);
     if (!parentNode) return nodeId;
     
-    // If parent is main and has no parents, parent is the main branch
-    if (parentNode.type === 'main' && !connections.some(c => c.to === parentNode.id)) {
+    // If parent is a root, return it
+    if (rootNodes.some(root => root.id === parentNode.id)) {
       return parentNode.id;
     }
     
-    return findMainBranch(parentNode.id, visited);
+    // Otherwise, keep looking up
+    return findRootParent(parentNode.id, visited);
   };
-
-  const mainBranchId = findMainBranch(node.id);
-  if (!mainBranchId) return BRANCH_COLOR_SYSTEM.priority[0].color;
-
-  // Get branch index
-  const mainBranches = allNodes
-    .filter(n => n.type === 'main' && !connections.some(c => c.to === n.id))
-    .sort((a, b) => a.id.localeCompare(b.id)); // Consistent ordering
-    
-  const branchIndex = mainBranches.findIndex(n => n.id === mainBranchId);
-  if (branchIndex === -1) return BRANCH_COLOR_SYSTEM.priority[0].color;
   
-  // Select color: priority colors first, then additional colors
-  let baseColor: string;
-  if (branchIndex < BRANCH_COLOR_SYSTEM.priority.length) {
-    baseColor = BRANCH_COLOR_SYSTEM.priority[branchIndex].color;
-  } else {
-    const additionalIndex = (branchIndex - BRANCH_COLOR_SYSTEM.priority.length) % BRANCH_COLOR_SYSTEM.additional.length;
-    baseColor = BRANCH_COLOR_SYSTEM.additional[additionalIndex].color;
+  const rootParentId = findRootParent(node.id);
+  console.log('Found root parent for', node.label, ':', rootParentId);
+  
+  if (rootParentId) {
+    const rootParent = allNodes.find(n => n.id === rootParentId);
+    if (rootParent) {
+      // Get the base color from the root parent
+      const rootIndex = rootNodes.findIndex(root => root.id === rootParentId);
+      let baseColor: string;
+      
+      if (rootIndex === 0) {
+        baseColor = BRANCH_COLOR_SYSTEM.primary.color;
+      } else {
+        const branchIndex = rootIndex - 1;
+        if (branchIndex < BRANCH_COLOR_SYSTEM.priority.length) {
+          baseColor = BRANCH_COLOR_SYSTEM.priority[branchIndex].color;
+        } else {
+          const additionalIndex = (branchIndex - BRANCH_COLOR_SYSTEM.priority.length) % BRANCH_COLOR_SYSTEM.additional.length;
+          baseColor = BRANCH_COLOR_SYSTEM.additional[additionalIndex].color;
+        }
+      }
+      
+      // Apply hierarchy lightening based on depth
+      const getNodeDepth = (nodeId: string): number => {
+        const connection = connections.find(c => c.to === nodeId);
+        if (!connection) return 0;
+        return 1 + getNodeDepth(connection.from);
+      };
+      
+      const depth = getNodeDepth(node.id);
+      console.log('Node depth:', depth, 'Base color:', baseColor);
+      
+      return adjustColorBrightness(baseColor, depth);
+    }
   }
-
-  // Apply hierarchy lightening (10% per level, reset if too light)
-  const getNodeLevel = (nodeId: string): number => {
-    const connection = connections.find(c => c.to === nodeId);
-    if (!connection) return 0;
-    return 1 + getNodeLevel(connection.from);
-  };
-
-  const level = getNodeLevel(node.id);
-  return adjustColorBrightness(baseColor, level);
+  
+  // Fallback
+  console.log('Using fallback color for:', node.label);
+  return BRANCH_COLOR_SYSTEM.priority[0].color;
 };
 
 // Adjust color brightness for hierarchy with reset mechanism
@@ -940,50 +977,81 @@ export default function Tool() {
             {/* Step 3: Complete Mind Map */}
             {currentStep === 'complete' && (
               <div className={isFullscreen ? 'flex-1 flex flex-col' : ''}>
-                {/* Controls */}
+                {/* Controls - Better Layout */}
                 {!isFullscreen && (
-                  <div className="mb-6 flex flex-wrap gap-4 items-center justify-between">
-                    <div className="flex gap-3">
-                      <input
-                        type="text"
+                  <div className="mb-6">
+                    {/* Input Section */}
+                    <div className="mb-4">
+                      <textarea
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
                         placeholder="Continue evolving your mind map..."
-                        className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 w-80"
-                        onKeyPress={(e) => e.key === 'Enter' && generateMindMap(true)}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        rows={3}
+                        onKeyPress={(e) => e.key === 'Enter' && e.shiftKey === false && (e.preventDefault(), generateMindMap(true))}
                       />
-                      <button
-                        onClick={() => generateMindMap(true)}
-                        disabled={!input.trim()}
-                        className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50"
-                      >
-                        Continue
-                      </button>
-                      <button
-                        onClick={startOver}
-                        className="bg-gray-600 text-white px-6 py-2 rounded-lg hover:bg-gray-700"
-                      >
-                        Start Over
-                      </button>
                     </div>
                     
-                    <div className="flex gap-3">
-                      <button
-                        onClick={() => {
-                          setIsFullscreen(true);
-                          setShowFullscreenInput(true);
-                        }}
-                        className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700"
-                      >
-                        Fullscreen
-                      </button>
-                      <button
-                        onClick={() => exportMindMap('json')}
-                        className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-                      >
-                        Export JSON
-                      </button>
+                    {/* Buttons Under Input */}
+                    <div className="flex flex-wrap gap-3 items-center justify-between mb-4">
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => generateMindMap(true)}
+                          disabled={!input.trim()}
+                          className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50"
+                        >
+                          Continue
+                        </button>
+                        <button
+                          onClick={startOver}
+                          className="bg-gray-600 text-white px-6 py-2 rounded-lg hover:bg-gray-700"
+                        >
+                          Start Over
+                        </button>
+                        <button
+                          onClick={() => setShowFileUpload(true)}
+                          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                        >
+                          📁 Upload
+                        </button>
+                      </div>
+                      
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => {
+                            setIsFullscreen(true);
+                            setShowFullscreenInput(true);
+                          }}
+                          className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700"
+                        >
+                          Fullscreen
+                        </button>
+                        <button
+                          onClick={() => exportMindMap('json')}
+                          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                        >
+                          Export JSON
+                        </button>
+                      </div>
                     </div>
+
+                    {/* AI Suggestions Under Buttons */}
+                    {suggestions.length > 0 && (
+                      <div className="p-4 bg-blue-50 rounded-lg">
+                        <h3 className="text-lg font-medium text-blue-900 mb-3">💡 AI Expansion Suggestions</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                          {suggestions.map((suggestion, index) => (
+                            <button
+                              key={index}
+                              onClick={() => setInput(suggestion)}
+                              className="text-left p-3 bg-white rounded border hover:bg-blue-50 hover:border-blue-300 transition-colors"
+                            >
+                              <span className="text-sm text-gray-700">{suggestion}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1007,32 +1075,6 @@ export default function Tool() {
                     <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
                   </ReactFlow>
                 </div>
-
-                {/* Problem 9: AI Suggestions - Only shown when not fullscreen */}
-                {!isFullscreen && suggestions.length > 0 && (
-                  <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-                    <h3 className="text-lg font-medium text-blue-900 mb-3">💡 AI Expansion Suggestions</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                      {suggestions.map((suggestion, index) => (
-                        <button
-                          key={index}
-                          onClick={() => setInput(suggestion)}
-                          className="text-left p-3 bg-white rounded border hover:bg-blue-50 hover:border-blue-300 transition-colors"
-                        >
-                          <span className="text-sm text-gray-700">{suggestion}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Analysis - Only shown when not fullscreen */}
-                {!isFullscreen && analysis && (
-                  <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-                    <h3 className="text-lg font-medium text-gray-900 mb-3">🧠 Mind Map Analysis</h3>
-                    <p className="text-gray-700">{analysis}</p>
-                  </div>
-                )}
               </div>
             )}
           </div>
