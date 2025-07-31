@@ -30,7 +30,7 @@ import type { Node, Edge, NodeChange } from 'reactflow';
 
 // Define enums locally to avoid SSR issues
 const MarkerType = {
-  Arrow: 'arrow' as const,
+  Arrow: 'arrowclosed' as const,
   ArrowClosed: 'arrowclosed' as const
 };
 
@@ -361,7 +361,7 @@ export default function IntelligentTool() {
             relationship_type: connection.relationship_type,
             strength: connection.strength
           }
-        };
+        } as Edge;
       });
 
       if (evolve) {
