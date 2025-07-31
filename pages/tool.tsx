@@ -249,6 +249,11 @@ const assignBranchColor = (
   index: number
 ): string => {
   
+  // Safety checks
+  if (!node || !allNodes || !connections) {
+    return BRANCH_COLOR_SYSTEM.primary.color;
+  }
+  
   // Center/primary nodes always get primary color
   if (node.type === 'main' && !connections.some(c => c.to === node.id)) {
     return BRANCH_COLOR_SYSTEM.primary.color;
@@ -282,6 +287,7 @@ const assignBranchColor = (
     .sort((a, b) => a.id.localeCompare(b.id)); // Consistent ordering
     
   const branchIndex = mainBranches.findIndex(n => n.id === mainBranchId);
+  if (branchIndex === -1) return BRANCH_COLOR_SYSTEM.priority[0].color;
   
   // Select color: priority colors first, then additional colors
   let baseColor: string;
@@ -305,26 +311,41 @@ const assignBranchColor = (
 
 // Adjust color brightness for hierarchy with reset mechanism
 const adjustColorBrightness = (hexColor: string, level: number): string => {
-  const lightenPercent = Math.min(level * 10, 60); // Max 60% lighter
-  
-  // Convert hex to RGB
-  const r = parseInt(hexColor.slice(1, 3), 16);
-  const g = parseInt(hexColor.slice(3, 5), 16);
-  const b = parseInt(hexColor.slice(5, 7), 16);
-  
-  // Apply lightening
-  const factor = lightenPercent / 100;
-  const newR = Math.min(255, Math.round(r + (255 - r) * factor));
-  const newG = Math.min(255, Math.round(g + (255 - g) * factor));
-  const newB = Math.min(255, Math.round(b + (255 - b) * factor));
-  
-  // If too light (>90% white), reset to darker version
-  const avgBrightness = (newR + newG + newB) / 3;
-  if (avgBrightness > 230) {
-    return adjustColorBrightness(hexColor, Math.floor(level / 2));
+  // Safety checks
+  if (!hexColor || typeof hexColor !== 'string' || !hexColor.startsWith('#') || hexColor.length !== 7) {
+    return BRANCH_COLOR_SYSTEM.primary.color; // Fallback to primary color
   }
   
-  return `#${newR.toString(16).padStart(2, '0')}${newG.toString(16).padStart(2, '0')}${newB.toString(16).padStart(2, '0')}`;
+  const lightenPercent = Math.min(level * 10, 60); // Max 60% lighter
+  
+  // Convert hex to RGB with error handling
+  try {
+    const r = parseInt(hexColor.slice(1, 3), 16);
+    const g = parseInt(hexColor.slice(3, 5), 16);
+    const b = parseInt(hexColor.slice(5, 7), 16);
+    
+    // Check for valid RGB values
+    if (isNaN(r) || isNaN(g) || isNaN(b)) {
+      return BRANCH_COLOR_SYSTEM.primary.color;
+    }
+    
+    // Apply lightening
+    const factor = lightenPercent / 100;
+    const newR = Math.min(255, Math.round(r + (255 - r) * factor));
+    const newG = Math.min(255, Math.round(g + (255 - g) * factor));
+    const newB = Math.min(255, Math.round(b + (255 - b) * factor));
+    
+    // If too light (>90% white), reset to darker version
+    const avgBrightness = (newR + newG + newB) / 3;
+    if (avgBrightness > 230) {
+      return adjustColorBrightness(hexColor, Math.floor(level / 2));
+    }
+    
+    return `#${newR.toString(16).padStart(2, '0')}${newG.toString(16).padStart(2, '0')}${newB.toString(16).padStart(2, '0')}`;
+  } catch (error) {
+    console.warn('Color adjustment error:', error);
+    return BRANCH_COLOR_SYSTEM.primary.color;
+  }
 };
 
 // Problem 32: Smart edge connection points that adjust when nodes move
@@ -484,10 +505,10 @@ export default function Tool() {
           const existingData = {
             nodes: nodes.map(node => ({
               id: node.id,
-              label: node.data.label,
-              type: node.data.type,
+              label: node.data?.label || 'Unknown',
+              type: node.data?.type || 'main',
               position: node.position,
-              color: node.style?.background
+              color: typeof node.style?.background === 'string' ? node.style.background : undefined
             })),
             edges: edges.map(edge => ({
               from: edge.source,
@@ -511,13 +532,21 @@ export default function Tool() {
         };
 
         if (evolve) {
-          requestBody.existingNodes = nodes.map(node => ({
-            id: node.id,
-            label: node.data.label,
-            type: node.data.type,
-            position: node.position,
-            color: node.style?.background
-          }));
+          const existingData = {
+            nodes: nodes.map(node => ({
+              id: node.id,
+              label: node.data?.label || 'Unknown',
+              type: node.data?.type || 'main',
+              position: node.position,
+              color: typeof node.style?.background === 'string' ? node.style.background : undefined
+            })),
+            edges: edges.map(edge => ({
+              from: edge.source,
+              to: edge.target
+            })),
+            conversationHistory
+          };
+          requestBody.existingNodes = existingData.nodes;
         }
 
         response = await fetch('/api/mind-map/generate', {
@@ -560,7 +589,15 @@ export default function Tool() {
       // Create React Flow nodes with intelligent color assignment
       const flowNodes: Node[] = mindMapData.nodes.map((node, index) => {
         const position = positions.get(node.id) || { x: 0, y: 0 };
-        const backgroundColor = assignBranchColor(node, mindMapData.nodes, mindMapData.connections, index);
+        
+        // Safe color assignment with error handling
+        let backgroundColor: string;
+        try {
+          backgroundColor = assignBranchColor(node, mindMapData.nodes, mindMapData.connections, index);
+        } catch (error) {
+          console.warn('Color assignment error:', error);
+          backgroundColor = BRANCH_COLOR_SYSTEM.primary.color; // Fallback to primary color
+        }
         
         return {
           id: node.id,
@@ -605,9 +642,12 @@ export default function Tool() {
         }
 
         const { sourceHandle, targetHandle } = calculateConnectionPoints(sourceNode, targetNode);
-        const strokeColor = typeof sourceNode?.style?.background === 'string' 
-          ? sourceNode.style.background 
-          : '#6B7280';
+        
+        // Safe color extraction with fallback
+        let strokeColor = '#6B7280'; // Default gray
+        if (sourceNode?.style?.background && typeof sourceNode.style.background === 'string') {
+          strokeColor = sourceNode.style.background;
+        }
 
         return {
           id: `${connection.from}-${connection.to}`,
@@ -673,10 +713,10 @@ export default function Tool() {
       const data = {
         nodes: nodes.map(node => ({
           id: node.id,
-          label: node.data.label,
-          type: node.data.type,
+          label: node.data?.label || 'Unknown',
+          type: node.data?.type || 'main',
           position: node.position,
-          color: node.style?.background
+          color: typeof node.style?.background === 'string' ? node.style.background : undefined
         })),
         edges: edges.map(edge => ({
           from: edge.source,
