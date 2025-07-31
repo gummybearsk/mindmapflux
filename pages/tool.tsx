@@ -365,8 +365,10 @@ export default function Tool() {
           ? createSmartEdge(connection.from, connection.to, sourceNode, targetNode)
           : { sourcePosition: Position.Right, targetPosition: Position.Left };
 
-        // Get edge color based on source node color with slight transparency
-        const sourceColor = sourceNode?.style?.background || '#6B7280';
+        // Get edge color as string from source node - ensure it's a valid color string
+        const sourceColor = typeof sourceNode?.style?.background === 'string' 
+          ? sourceNode.style.background 
+          : '#6B7280';
 
         return {
           id: `edge-${index}`,
