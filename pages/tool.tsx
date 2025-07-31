@@ -21,68 +21,75 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
-// Color schemes with high contrast for readability (Problem 22)
-const MINDMAP_COLOR_SCHEMES = {
-  purple: {
-    name: "Absolute Purple",
-    chinese: "绝绝紫",
-    primary: "#795F9C",
-    secondary: "#EEDACA",
-    root: "#4A1958", // Darker for better contrast
-    main: "#795F9C",
-    sub: "#A67CB5",
-    detail: "#D4B5E8",
-    background: "#F9F7FC",
-    text: "#FFFFFF" // White text for contrast
-  },
-  calmGreen: {
-    name: "Calm Green",
-    chinese: "静谧绿",
-    primary: "#4A9B8E",
-    secondary: "#B8E6D3",
-    root: "#1F4E3D", // Darker for better contrast
-    main: "#4A9B8E",
-    sub: "#7BC4B8",
-    detail: "#B8E6D3",
-    background: "#F4FCF9",
-    text: "#FFFFFF"
-  },
-  warmOrange: {
-    name: "Warm Orange",
-    chinese: "暖橙色",
-    primary: "#E67E22",
-    secondary: "#FDF2E9",
-    root: "#B8540A", // Darker for better contrast
-    main: "#E67E22",
-    sub: "#F39C12",
-    detail: "#FCF3CF",
-    background: "#FFFBF5",
-    text: "#FFFFFF"
-  },
-  oceanBlue: {
-    name: "Ocean Blue",
-    chinese: "海洋蓝",
-    primary: "#3498DB",
-    secondary: "#EBF5FB",
-    root: "#1A5490", // Darker for better contrast
-    main: "#3498DB",
-    sub: "#5DADE2",
-    detail: "#D6EAF8",
-    background: "#F8FCFF",
-    text: "#FFFFFF"
-  },
-  sunsetRed: {
-    name: "Sunset Red",
-    chinese: "夕阳红",
-    primary: "#E74C3C",
-    secondary: "#FDEDEC",
-    root: "#A12B1F", // Darker for better contrast
-    main: "#E74C3C",
-    sub: "#EC7063",
-    detail: "#F9EBEA",
-    background: "#FFF9F9",
-    text: "#FFFFFF"
+// Smart Dynamic Color Palette - Auto-assigns colors based on hierarchy and aesthetics
+const SMART_COLOR_PALETTE = {
+  // Core colors for different hierarchy levels
+  hierarchy: [
+    "#2D3748", // Deep Gray - Root/Center (strong foundation)
+    "#2B6CB0", // Deep Blue - Primary branches (trust, stability)
+    "#059669", // Green - Secondary branches (growth, nature)
+    "#DC2626", // Red - Tertiary branches (energy, importance)
+    "#7C2D12", // Brown - Supporting ideas (grounded, practical)
+    "#6366F1", // Indigo - Creative branches (innovation, imagination)
+    "#DB2777", // Pink - Emotional/personal branches (passion, feeling)
+    "#EA580C", // Orange - Action-oriented branches (enthusiasm, action)
+    "#7C3AED", // Purple - Strategic/planning branches (wisdom, strategy)
+    "#0891B2", // Cyan - Technical/analytical branches (precision, analysis)
+  ],
+  
+  // Contextual colors based on content type
+  contextual: {
+    business: "#1E40AF", // Professional blue
+    creative: "#7C2D12", // Creative brown
+    emotional: "#DC2626", // Emotional red
+    technical: "#059669", // Technical green
+    planning: "#7C3AED", // Planning purple
+    financial: "#D97706", // Financial orange
+    social: "#DB2777", // Social pink
+    health: "#059669", // Health green
+    education: "#6366F1", // Education indigo
+    default: "#4B5563" // Neutral gray
   }
+};
+
+// Intelligent color assignment based on node content, hierarchy, and aesthetics
+const getIntelligentColor = (node: MindMapNode, allNodes: MindMapNode[], nodeIndex: number, hierarchyLevel: number) => {
+  const colors = SMART_COLOR_PALETTE;
+  
+  // Analyze content for contextual coloring
+  const nodeText = node.label.toLowerCase();
+  let contextColor = colors.contextual.default;
+  
+  // Context detection
+  if (nodeText.includes('business') || nodeText.includes('market') || nodeText.includes('revenue')) {
+    contextColor = colors.contextual.business;
+  } else if (nodeText.includes('creative') || nodeText.includes('design') || nodeText.includes('art')) {
+    contextColor = colors.contextual.creative;
+  } else if (nodeText.includes('emotion') || nodeText.includes('feeling') || nodeText.includes('personal')) {
+    contextColor = colors.contextual.emotional;
+  } else if (nodeText.includes('technical') || nodeText.includes('system') || nodeText.includes('process')) {
+    contextColor = colors.contextual.technical;
+  } else if (nodeText.includes('plan') || nodeText.includes('strategy') || nodeText.includes('goal')) {
+    contextColor = colors.contextual.planning;
+  } else if (nodeText.includes('money') || nodeText.includes('cost') || nodeText.includes('price')) {
+    contextColor = colors.contextual.financial;
+  }
+  
+  // For center/root nodes - use contextual color or deep foundation color
+  if (node.type === 'center') {
+    return contextColor !== colors.contextual.default ? contextColor : colors.hierarchy[0];
+  }
+  
+  // For hierarchical nodes - use hierarchy colors with some contextual influence
+  const hierarchyColor = colors.hierarchy[Math.min(hierarchyLevel, colors.hierarchy.length - 1)];
+  
+  // Add variety within same level using node index
+  if (hierarchyLevel > 0) {
+    const colorIndex = (hierarchyLevel + Math.floor(nodeIndex / 3)) % colors.hierarchy.length;
+    return colors.hierarchy[colorIndex];
+  }
+  
+  return hierarchyColor;
 };
 
 // Interfaces
@@ -105,7 +112,6 @@ export default function Tool() {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [selectedColorScheme, setSelectedColorScheme] = useState('calmGreen');
   const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
   const [mindMapAnalysis, setMindMapAnalysis] = useState('');
   const [conversationHistory, setConversationHistory] = useState<string[]>([]);
@@ -119,9 +125,8 @@ export default function Tool() {
     'Finalizing your visual thought map...'
   ]);
   const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
-  const [showColorOptions, setShowColorOptions] = useState(false); // Problem 21
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
-  const [currentStep, setCurrentStep] = useState<'input' | 'generating' | 'complete'>('input'); // Problem 24
+  const [currentStep, setCurrentStep] = useState<'input' | 'generating' | 'complete'>('input');
 
   // Problem 28: Rotating loading messages
   useEffect(() => {
@@ -214,7 +219,7 @@ export default function Tool() {
   };
 
   // Problem 26: Custom edge with dynamic connection points
-  const createSmartEdge = (source: string, target: string, sourceNode: Node, targetNode: Node, scheme: any) => {
+  const createSmartEdge = (source: string, target: string, sourceNode: Node, targetNode: Node) => {
     // Calculate connection points based on node positions
     const sourcePos = sourceNode.position;
     const targetPos = targetNode.position;
@@ -260,8 +265,7 @@ export default function Tool() {
                 const targetNode = nodes.find(n => n.id === edge.target);
                 
                 if (sourceNode && targetNode) {
-                  const scheme = MINDMAP_COLOR_SCHEMES[selectedColorScheme as keyof typeof MINDMAP_COLOR_SCHEMES];
-                  const { sourcePosition, targetPosition } = createSmartEdge(edge.source, edge.target, sourceNode, targetNode, scheme);
+                  const { sourcePosition, targetPosition } = createSmartEdge(edge.source, edge.target, sourceNode, targetNode);
                   
                   return {
                     ...edge,
@@ -276,7 +280,7 @@ export default function Tool() {
         }
       }
     });
-  }, [nodes, onNodesChange, setEdges, selectedColorScheme]);
+  }, [nodes, onNodesChange, setEdges]);
 
   const generateMindMap = async (evolve = false) => {
     if (!input.trim()) return;
@@ -291,7 +295,6 @@ export default function Tool() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           input: input.trim(),
-          colorScheme: selectedColorScheme,
           isEvolution: evolve,
           existingNodes: evolve ? nodes : [],
           conversationHistory
@@ -312,21 +315,19 @@ export default function Tool() {
       
       // Calculate optimal positions with overlap prevention
       const positions = calculatePositions(mindMapData, evolve ? nodes : []);
-      
-      // Get selected color scheme
-      const scheme = MINDMAP_COLOR_SCHEMES[selectedColorScheme as keyof typeof MINDMAP_COLOR_SCHEMES];
 
-      // Create React Flow nodes with better contrast (Problem 22)
-      const flowNodes: Node[] = mindMapData.nodes.map(node => {
+      // Create React Flow nodes with intelligent color assignment
+      const flowNodes: Node[] = mindMapData.nodes.map((node, index) => {
         const position = positions.get(node.id) || { x: 0, y: 0 };
         const nodeSize = node.type === 'center' ? 'large' : node.type === 'main' ? 'medium' : 'small';
         
-        // Map node type to color scheme property
-        let backgroundColor = scheme.primary;
-        if (node.type === 'center') backgroundColor = scheme.root;
-        else if (node.type === 'main') backgroundColor = scheme.main;
-        else if (node.type === 'sub') backgroundColor = scheme.sub;
-        else if (node.type === 'detail') backgroundColor = scheme.detail;
+        // Get hierarchy level for this node type
+        const hierarchyLevel = node.type === 'center' ? 0 : 
+                              node.type === 'main' ? 1 : 
+                              node.type === 'sub' ? 2 : 3;
+        
+        // Get intelligent color based on content, hierarchy, and aesthetics
+        const backgroundColor = getIntelligentColor(node, mindMapData.nodes, index, hierarchyLevel);
 
         return {
           id: node.id,
@@ -338,8 +339,8 @@ export default function Tool() {
           },
           style: {
             background: backgroundColor,
-            color: scheme.text, // High contrast text (Problem 22)
-            border: `2px solid ${scheme.secondary}`,
+            color: "#FFFFFF", // High contrast white text
+            border: `2px solid ${backgroundColor}`,
             borderRadius: nodeSize === 'large' ? '15px' : nodeSize === 'medium' ? '10px' : '8px',
             padding: nodeSize === 'large' ? '15px 20px' : nodeSize === 'medium' ? '12px 16px' : '8px 12px',
             fontSize: nodeSize === 'large' ? '16px' : nodeSize === 'medium' ? '14px' : '12px',
@@ -355,14 +356,17 @@ export default function Tool() {
         };
       });
 
-      // Create React Flow edges with smart connection points (Problem 26)
+      // Create React Flow edges with smart connection points
       const flowEdges: Edge[] = mindMapData.connections.map((connection, index) => {
         const sourceNode = flowNodes.find(n => n.id === connection.from);
         const targetNode = flowNodes.find(n => n.id === connection.to);
         
         const { sourcePosition, targetPosition } = sourceNode && targetNode 
-          ? createSmartEdge(connection.from, connection.to, sourceNode, targetNode, scheme)
+          ? createSmartEdge(connection.from, connection.to, sourceNode, targetNode)
           : { sourcePosition: Position.Right, targetPosition: Position.Left };
+
+        // Get edge color based on source node color with slight transparency
+        const sourceColor = sourceNode?.style?.background || '#6B7280';
 
         return {
           id: `edge-${index}`,
@@ -371,12 +375,13 @@ export default function Tool() {
           type: 'smoothstep',
           animated: false,
           style: {
-            stroke: scheme.secondary,
-            strokeWidth: 2
+            stroke: sourceColor,
+            strokeWidth: 2,
+            strokeOpacity: 0.8
           },
           markerEnd: {
             type: MarkerType.Arrow,
-            color: scheme.main,
+            color: sourceColor,
           },
           sourceHandle: sourcePosition,
           targetHandle: targetPosition
@@ -436,13 +441,13 @@ export default function Tool() {
         id: node.id,
         label: node.data.label,
         type: node.data.type,
-        position: node.position
+        position: node.position,
+        color: node.style?.background
       })),
       edges: edges.map(edge => ({
         source: edge.source,
         target: edge.target
       })),
-      colorScheme: selectedColorScheme,
       analysis: mindMapAnalysis,
       suggestions: aiSuggestions
     };
@@ -456,19 +461,8 @@ export default function Tool() {
     URL.revokeObjectURL(url);
   };
 
-  // Problem 21: Auto color selection based on hierarchy
-  useEffect(() => {
-    if (nodes.length > 0 && !showColorOptions) {
-      // Auto-select colors based on mind map complexity and evolve when needed
-      const colorKeys = Object.keys(MINDMAP_COLOR_SCHEMES);
-      const currentIndex = colorKeys.indexOf(selectedColorScheme);
-      
-      // Change color scheme when mind map evolves beyond certain complexity
-      if (nodes.length > 10 && currentIndex < colorKeys.length - 1) {
-        setSelectedColorScheme(colorKeys[currentIndex + 1]);
-      }
-    }
-  }, [nodes.length, selectedColorScheme, showColorOptions]);
+  // Remove the manual color selection effect - colors are now fully automatic
+  // Auto-adjustment happens during mind map generation based on content and hierarchy
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -520,49 +514,6 @@ export default function Tool() {
                   className="w-full h-32 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none text-gray-900"
                   disabled={isGenerating}
                 />
-              </div>
-
-              {/* Problem 21: Color schemes as system choice, with option to show manual selection */}
-              <div className="mb-6">
-                <div className="flex items-center justify-between mb-3">
-                  <label className="block text-lg font-medium text-gray-700">
-                    Color Theme: <span className="text-sm text-gray-500">(Auto-selected based on content)</span>
-                  </label>
-                  <button
-                    onClick={() => setShowColorOptions(!showColorOptions)}
-                    className="text-sm text-blue-600 hover:text-blue-800"
-                  >
-                    {showColorOptions ? 'Auto Select' : 'Manual Select'}
-                  </button>
-                </div>
-                
-                {showColorOptions && (
-                  <div className="flex flex-wrap gap-3">
-                    {Object.entries(MINDMAP_COLOR_SCHEMES).map(([key, scheme]) => (
-                      <button
-                        key={key}
-                        onClick={() => setSelectedColorScheme(key)}
-                        className={`px-4 py-2 rounded-lg border-2 transition-all ${
-                          selectedColorScheme === key ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-gray-400'
-                        }`}
-                        style={{
-                          backgroundColor: selectedColorScheme === key ? scheme.background : undefined,
-                          borderColor: selectedColorScheme === key ? scheme.primary : undefined
-                        }}
-                      >
-                        <div className="text-sm font-medium text-gray-900">{scheme.name}</div>
-                        <div className="text-xs text-gray-600">{scheme.chinese}</div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-                
-                {!showColorOptions && (
-                  <div className="text-sm text-gray-600">
-                    Current: {MINDMAP_COLOR_SCHEMES[selectedColorScheme as keyof typeof MINDMAP_COLOR_SCHEMES].name} 
-                    ({MINDMAP_COLOR_SCHEMES[selectedColorScheme as keyof typeof MINDMAP_COLOR_SCHEMES].chinese})
-                  </div>
-                )}
               </div>
 
               {/* Problem 24: Single button at the beginning */}
