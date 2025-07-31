@@ -471,37 +471,61 @@ export default function Tool() {
     setCurrentStep('generating');
     
     try {
-      const formData = new FormData();
-      formData.append('input', input.trim());
-      formData.append('isEvolution', evolve.toString());
+      let response;
       
       if (uploadedFile) {
+        // Use FormData only when file is uploaded
+        const formData = new FormData();
+        formData.append('input', input.trim());
+        formData.append('isEvolution', evolve.toString());
         formData.append('file', uploadedFile);
-      }
-      
-      if (evolve) {
-        // Include existing mind map data for evolution
-        const existingData = {
-          nodes: nodes.map(node => ({
+        
+        if (evolve) {
+          const existingData = {
+            nodes: nodes.map(node => ({
+              id: node.id,
+              label: node.data.label,
+              type: node.data.type,
+              position: node.position,
+              color: node.style?.background
+            })),
+            edges: edges.map(edge => ({
+              from: edge.source,
+              to: edge.target
+            })),
+            conversationHistory
+          };
+          formData.append('existingNodes', JSON.stringify(existingData));
+        }
+
+        response = await fetch('/api/mind-map/generate', {
+          method: 'POST',
+          body: formData
+        });
+      } else {
+        // Use JSON format for regular requests (maintains backend compatibility)
+        const requestBody: any = {
+          input: input.trim(),
+          isEvolution: evolve,
+          conversationHistory
+        };
+
+        if (evolve) {
+          requestBody.existingNodes = nodes.map(node => ({
             id: node.id,
             label: node.data.label,
             type: node.data.type,
             position: node.position,
             color: node.style?.background
-          })),
-          edges: edges.map(edge => ({
-            from: edge.source,
-            to: edge.target
-          })),
-          conversationHistory
-        };
-        formData.append('existingNodes', JSON.stringify(existingData));
-      }
+          }));
+        }
 
-      const response = await fetch('/api/mind-map/generate', {
-        method: 'POST',
-        body: formData
-      });
+        response = await fetch('/api/mind-map/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody)
+        });
+      }
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
