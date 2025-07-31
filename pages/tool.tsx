@@ -13,7 +13,8 @@ import ReactFlow, {
   Edge,
   Node,
   MarkerType,
-  Position
+  Position,
+  BackgroundVariant
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
@@ -470,7 +471,7 @@ export default function Tool() {
             >
               <Controls />
               <MiniMap />
-              <Background variant="dots" gap={12} size={1} />
+              <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
             </ReactFlow>
           </div>
         </div>
