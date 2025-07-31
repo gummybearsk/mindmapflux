@@ -21,75 +21,173 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
-// Smart Dynamic Color Palette - Auto-assigns colors based on hierarchy and aesthetics
-const SMART_COLOR_PALETTE = {
-  // Core colors for different hierarchy levels
-  hierarchy: [
-    "#2D3748", // Deep Gray - Root/Center (strong foundation)
-    "#2B6CB0", // Deep Blue - Primary branches (trust, stability)
-    "#059669", // Green - Secondary branches (growth, nature)
-    "#DC2626", // Red - Tertiary branches (energy, importance)
-    "#7C2D12", // Brown - Supporting ideas (grounded, practical)
-    "#6366F1", // Indigo - Creative branches (innovation, imagination)
-    "#DB2777", // Pink - Emotional/personal branches (passion, feeling)
-    "#EA580C", // Orange - Action-oriented branches (enthusiasm, action)
-    "#7C3AED", // Purple - Strategic/planning branches (wisdom, strategy)
-    "#0891B2", // Cyan - Technical/analytical branches (precision, analysis)
+// Smart Dynamic Color Palette - Based on Branch System with Hierarchy
+const BRANCH_COLOR_SYSTEM = {
+  // Primary node color
+  primary: {
+    color: "#2D7D7D", // Teal - 正经绿
+    name: "正经绿"
+  },
+  
+  // Priority branch colors - use these first, don't cycle
+  priorityBranchColors: [
+    { color: "#795F9C", name: "绝绝紫" },
+    { color: "#D85B72", name: "发财红" },
+    { color: "#6B8857", name: "不焦虑" },
+    { color: "#518463", name: "放青松" },
+    { color: "#4C697A", name: "不摆蓝" },
+    { color: "#886441", name: "糖太棕" }
   ],
   
-  // Contextual colors based on content type
-  contextual: {
-    business: "#1E40AF", // Professional blue
-    creative: "#7C2D12", // Creative brown
-    emotional: "#DC2626", // Emotional red
-    technical: "#059669", // Technical green
-    planning: "#7C3AED", // Planning purple
-    financial: "#D97706", // Financial orange
-    social: "#DB2777", // Social pink
-    health: "#059669", // Health green
-    education: "#6366F1", // Education indigo
-    default: "#4B5563" // Neutral gray
+  // Additional logical and aesthetic colors for branches beyond the first 6
+  additionalBranchColors: [
+    { color: "#8B4513", name: "深棕" }, // Deep brown
+    { color: "#2F4F4F", name: "深青" }, // Dark slate gray
+    { color: "#800080", name: "深紫" }, // Deep purple
+    { color: "#B8860B", name: "暗金" }, // Dark goldenrod
+    { color: "#CD853F", name: "秋色" }, // Peru
+    { color: "#708090", name: "石蓝" }, // Slate gray
+    { color: "#A0522D", name: "赭石" }, // Sienna
+    { color: "#556B2F", name: "橄榄" }, // Dark olive green
+    { color: "#8B008B", name: "暗洋红" }, // Dark magenta
+    { color: "#2F4F4F", name: "墨绿" }  // Dark slate gray variant
+  ],
+  
+  // Get lighter version with minimal steps for many layers
+  getLighterVersion: (baseColor: string, level: number) => {
+    const hex = baseColor.replace('#', '');
+    const r = parseInt(hex.substr(0, 2), 16);
+    const g = parseInt(hex.substr(2, 2), 16);
+    const b = parseInt(hex.substr(4, 2), 16);
+    
+    // Small lightness increment (10% per level) to allow for many layers
+    const lightness = 0.1 * level;
+    const newR = Math.min(255, Math.round(r + (255 - r) * lightness));
+    const newG = Math.min(255, Math.round(g + (255 - g) * lightness));
+    const newB = Math.min(255, Math.round(b + (255 - b) * lightness));
+    
+    // If we've reached too light (when lightness would make it > 90% white), reset to darker
+    const avgBrightness = (newR + newG + newB) / 3;
+    if (avgBrightness > 230) {
+      // Reset to a darker version of the base color
+      const resetR = Math.max(50, Math.round(r * 0.7));
+      const resetG = Math.max(50, Math.round(g * 0.7));
+      const resetB = Math.max(50, Math.round(b * 0.7));
+      return `#${resetR.toString(16).padStart(2, '0')}${resetG.toString(16).padStart(2, '0')}${resetB.toString(16).padStart(2, '0')}`;
+    }
+    
+    return `#${newR.toString(16).padStart(2, '0')}${newG.toString(16).padStart(2, '0')}${newB.toString(16).padStart(2, '0')}`;
+  },
+  
+  // Get branch color by index - no cycling, use additional colors when needed
+  getBranchColor: (branchIndex: number) => {
+    if (branchIndex < BRANCH_COLOR_SYSTEM.priorityBranchColors.length) {
+      return BRANCH_COLOR_SYSTEM.priorityBranchColors[branchIndex];
+    } else {
+      // Use additional logical colors, not cycling
+      const additionalIndex = branchIndex - BRANCH_COLOR_SYSTEM.priorityBranchColors.length;
+      if (additionalIndex < BRANCH_COLOR_SYSTEM.additionalBranchColors.length) {
+        return BRANCH_COLOR_SYSTEM.additionalBranchColors[additionalIndex];
+      } else {
+        // Generate new logical colors if we run out
+        return { 
+          color: generateLogicalColor(branchIndex), 
+          name: `分支${branchIndex + 1}` 
+        };
+      }
+    }
   }
 };
 
-// Intelligent color assignment based on node content, hierarchy, and aesthetics
-const getIntelligentColor = (node: MindMapNode, allNodes: MindMapNode[], nodeIndex: number, hierarchyLevel: number) => {
-  const colors = SMART_COLOR_PALETTE;
+// Generate logical and aesthetic colors when we exceed predefined ones
+const generateLogicalColor = (index: number) => {
+  const hues = [30, 60, 120, 180, 210, 240, 270, 300, 330]; // Logical hue spread
+  const hue = hues[index % hues.length];
+  const saturation = 45 + (index % 3) * 15; // Vary saturation 45-75%
+  const lightness = 35 + (index % 4) * 10; // Vary lightness 35-65%
   
-  // Analyze content for contextual coloring
-  const nodeText = node.label.toLowerCase();
-  let contextColor = colors.contextual.default;
-  
-  // Context detection
-  if (nodeText.includes('business') || nodeText.includes('market') || nodeText.includes('revenue')) {
-    contextColor = colors.contextual.business;
-  } else if (nodeText.includes('creative') || nodeText.includes('design') || nodeText.includes('art')) {
-    contextColor = colors.contextual.creative;
-  } else if (nodeText.includes('emotion') || nodeText.includes('feeling') || nodeText.includes('personal')) {
-    contextColor = colors.contextual.emotional;
-  } else if (nodeText.includes('technical') || nodeText.includes('system') || nodeText.includes('process')) {
-    contextColor = colors.contextual.technical;
-  } else if (nodeText.includes('plan') || nodeText.includes('strategy') || nodeText.includes('goal')) {
-    contextColor = colors.contextual.planning;
-  } else if (nodeText.includes('money') || nodeText.includes('cost') || nodeText.includes('price')) {
-    contextColor = colors.contextual.financial;
-  }
-  
-  // For center/root nodes - use contextual color or deep foundation color
+  return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+};
+
+// Intelligent branch assignment based on node content and position
+const assignBranchColor = (node: MindMapNode, allNodes: MindMapNode[], nodeIndex: number, connections: { from: string; to: string }[]) => {
+  // Primary/center node always uses the primary color
   if (node.type === 'center') {
-    return contextColor !== colors.contextual.default ? contextColor : colors.hierarchy[0];
+    return BRANCH_COLOR_SYSTEM.primary.color;
   }
   
-  // For hierarchical nodes - use hierarchy colors with some contextual influence
-  const hierarchyColor = colors.hierarchy[Math.min(hierarchyLevel, colors.hierarchy.length - 1)];
-  
-  // Add variety within same level using node index
-  if (hierarchyLevel > 0) {
-    const colorIndex = (hierarchyLevel + Math.floor(nodeIndex / 3)) % colors.hierarchy.length;
-    return colors.hierarchy[colorIndex];
+  // Main branches get assigned different branch colors (no cycling)
+  if (node.type === 'main') {
+    const mainNodes = allNodes.filter(n => n.type === 'main');
+    const mainNodeIndex = mainNodes.findIndex(n => n.id === node.id);
+    const branchData = BRANCH_COLOR_SYSTEM.getBranchColor(mainNodeIndex);
+    return branchData.color;
   }
   
-  return hierarchyColor;
+  // Sub and detail nodes inherit from their parent branch with lighter colors
+  return findParentBranchColor(node, allNodes, connections);
+};
+
+// Find parent branch color and apply appropriate lightness
+const findParentBranchColor = (node: MindMapNode, allNodes: MindMapNode[], connections: { from: string; to: string }[]) => {
+  // Find the parent connection
+  const parentConnection = connections.find(conn => conn.to === node.id);
+  if (!parentConnection) {
+    // Fallback to first priority color
+    return BRANCH_COLOR_SYSTEM.priorityBranchColors[0].color;
+  }
+  
+  const parentNode = allNodes.find(n => n.id === parentConnection.from);
+  if (!parentNode) {
+    return BRANCH_COLOR_SYSTEM.priorityBranchColors[0].color;
+  }
+  
+  // If parent is main, get its branch color and make this one level lighter
+  if (parentNode.type === 'main') {
+    const mainNodes = allNodes.filter(n => n.type === 'main');
+    const parentIndex = mainNodes.findIndex(n => n.id === parentNode.id);
+    const branchData = BRANCH_COLOR_SYSTEM.getBranchColor(parentIndex);
+    return BRANCH_COLOR_SYSTEM.getLighterVersion(branchData.color, 1);
+  }
+  
+  // If parent is already a sub/detail, increment the lightness level
+  if (parentNode.type === 'sub') {
+    // Find the main branch this sub belongs to
+    const mainBranchColor = findMainBranchColor(parentNode, allNodes, connections);
+    return BRANCH_COLOR_SYSTEM.getLighterVersion(mainBranchColor, 2);
+  }
+  
+  if (parentNode.type === 'detail') {
+    // Find the main branch this detail belongs to
+    const mainBranchColor = findMainBranchColor(parentNode, allNodes, connections);
+    return BRANCH_COLOR_SYSTEM.getLighterVersion(mainBranchColor, 3);
+  }
+  
+  // Fallback
+  return BRANCH_COLOR_SYSTEM.priorityBranchColors[0].color;
+};
+
+// Recursively find the main branch color for a node
+const findMainBranchColor = (node: MindMapNode, allNodes: MindMapNode[], connections: { from: string; to: string }[]): string => {
+  const parentConnection = connections.find(conn => conn.to === node.id);
+  if (!parentConnection) {
+    return BRANCH_COLOR_SYSTEM.priorityBranchColors[0].color;
+  }
+  
+  const parentNode = allNodes.find(n => n.id === parentConnection.from);
+  if (!parentNode) {
+    return BRANCH_COLOR_SYSTEM.priorityBranchColors[0].color;
+  }
+  
+  if (parentNode.type === 'main') {
+    const mainNodes = allNodes.filter(n => n.type === 'main');
+    const parentIndex = mainNodes.findIndex(n => n.id === parentNode.id);
+    const branchData = BRANCH_COLOR_SYSTEM.getBranchColor(parentIndex);
+    return branchData.color;
+  }
+  
+  // Recursively find the main branch
+  return findMainBranchColor(parentNode, allNodes, connections);
 };
 
 // Interfaces
@@ -321,13 +419,8 @@ export default function Tool() {
         const position = positions.get(node.id) || { x: 0, y: 0 };
         const nodeSize = node.type === 'center' ? 'large' : node.type === 'main' ? 'medium' : 'small';
         
-        // Get hierarchy level for this node type
-        const hierarchyLevel = node.type === 'center' ? 0 : 
-                              node.type === 'main' ? 1 : 
-                              node.type === 'sub' ? 2 : 3;
-        
-        // Get intelligent color based on content, hierarchy, and aesthetics
-        const backgroundColor = getIntelligentColor(node, mindMapData.nodes, index, hierarchyLevel);
+        // Get intelligent color based on branch system and hierarchy
+        const backgroundColor = assignBranchColor(node, mindMapData.nodes, index, mindMapData.connections);
 
         return {
           id: node.id,
