@@ -117,39 +117,90 @@ const FileUploadSection = ({ onFileUpload, isVisible }: { onFileUpload: (file: F
   );
 };
 
-// Problem 31: Advanced layout algorithm with better spacing
+// SMART hierarchical positioning - as requested
 const calculateOptimalPositions = (mindMapData: MindMapData, existingNodes: Node[] = []): Map<string, { x: number; y: number }> => {
   const positions = new Map<string, { x: number; y: number }>();
   
-  // Find center/root nodes
-  const connectedNodeIds = new Set([
-    ...mindMapData.connections.map(c => c.from),
-    ...mindMapData.connections.map(c => c.to)
-  ]);
-  
-  const centerNodes = mindMapData.nodes.filter(node => 
-    node.type === 'main' && !mindMapData.connections.some(c => c.to === node.id)
-  );
-  
-  // If evolving, preserve existing positions and build around them
+  // If evolving, keep existing positions
   if (existingNodes.length > 0) {
     existingNodes.forEach(node => {
       positions.set(node.id, { x: node.position.x, y: node.position.y });
     });
   }
 
-  // Position center nodes first
-  centerNodes.forEach((centerNode, index) => {
-    if (positions.has(centerNode.id)) return; // Keep existing position
-    
-    const baseX = index * 400; // Spread multiple centers horizontally
-    positions.set(centerNode.id, { x: baseX, y: 0 });
+  // Find center node (most connected)
+  const connectionCounts = new Map<string, number>();
+  mindMapData.nodes.forEach(n => {
+    const incomingCount = mindMapData.connections.filter(c => c.to === n.id).length;
+    const outgoingCount = mindMapData.connections.filter(c => c.from === n.id).length;
+    connectionCounts.set(n.id, incomingCount + outgoingCount);
   });
-
-  // Build tree structure for each center
-  centerNodes.forEach(centerNode => {
-    const centerPos = positions.get(centerNode.id)!;
-    buildBranchLayout(centerNode.id, centerPos, mindMapData, positions, 1);
+  
+  const centerNode = mindMapData.nodes.reduce((prev, current) => {
+    const prevCount = connectionCounts.get(prev.id) || 0;
+    const currentCount = connectionCounts.get(current.id) || 0;
+    return currentCount > prevCount ? current : prev;
+  });
+  
+  // Position center node at origin
+  if (!positions.has(centerNode.id)) {
+    positions.set(centerNode.id, { x: 0, y: 0 });
+  }
+  
+  // Find and position main branches in a circle around center
+  const mainBranches = mindMapData.connections
+    .filter(c => c.from === centerNode.id)
+    .map(c => mindMapData.nodes.find(n => n.id === c.to))
+    .filter(Boolean) as MindMapNode[];
+  
+  const centerPos = positions.get(centerNode.id)!;
+  const mainRadius = 250;
+  
+  mainBranches.forEach((branch, index) => {
+    if (!positions.has(branch.id)) {
+      const angle = (2 * Math.PI * index) / mainBranches.length;
+      const x = centerPos.x + Math.cos(angle) * mainRadius;
+      const y = centerPos.y + Math.sin(angle) * mainRadius;
+      positions.set(branch.id, { x, y });
+    }
+  });
+  
+  // Position sub-branches for each main branch
+  mainBranches.forEach((mainBranch) => {
+    const mainPos = positions.get(mainBranch.id)!;
+    const subBranches = mindMapData.connections
+      .filter(c => c.from === mainBranch.id)
+      .map(c => mindMapData.nodes.find(n => n.id === c.to))
+      .filter(Boolean) as MindMapNode[];
+    
+    const subRadius = 150;
+    subBranches.forEach((subBranch, index) => {
+      if (!positions.has(subBranch.id)) {
+        const angle = (2 * Math.PI * index) / Math.max(subBranches.length, 1);
+        const x = mainPos.x + Math.cos(angle) * subRadius;
+        const y = mainPos.y + Math.sin(angle) * subRadius;
+        positions.set(subBranch.id, { x, y });
+      }
+    });
+    
+    // Position detail nodes for each sub-branch
+    subBranches.forEach((subBranch) => {
+      const subPos = positions.get(subBranch.id)!;
+      const detailNodes = mindMapData.connections
+        .filter(c => c.from === subBranch.id)
+        .map(c => mindMapData.nodes.find(n => n.id === c.to))
+        .filter(Boolean) as MindMapNode[];
+      
+      const detailRadius = 100;
+      detailNodes.forEach((detailNode, index) => {
+        if (!positions.has(detailNode.id)) {
+          const angle = (2 * Math.PI * index) / Math.max(detailNodes.length, 1);
+          const x = subPos.x + Math.cos(angle) * detailRadius;
+          const y = subPos.y + Math.sin(angle) * detailRadius;
+          positions.set(detailNode.id, { x, y });
+        }
+      });
+    });
   });
 
   return positions;
@@ -241,7 +292,7 @@ const findOptimalEmptyPosition = (
   };
 };
 
-// Get intelligent color based on branch system and hierarchy
+// SMART branch-based color assignment - as requested
 const assignBranchColor = (
   node: MindMapNode, 
   allNodes: MindMapNode[], 
@@ -249,141 +300,133 @@ const assignBranchColor = (
   index: number
 ): string => {
   
-  // Safety checks
-  if (!node || !allNodes || !connections) {
+  // Step 1: Find the center node (most connected or first node)
+  const connectionCounts = new Map<string, number>();
+  allNodes.forEach(n => {
+    const incomingCount = connections.filter(c => c.to === n.id).length;
+    const outgoingCount = connections.filter(c => c.from === n.id).length;
+    connectionCounts.set(n.id, incomingCount + outgoingCount);
+  });
+  
+  // Center node is the one with most connections, or first node if tie
+  const centerNode = allNodes.reduce((prev, current) => {
+    const prevCount = connectionCounts.get(prev.id) || 0;
+    const currentCount = connectionCounts.get(current.id) || 0;
+    return currentCount > prevCount ? current : prev;
+  });
+  
+  // Step 2: If this is the center node, use primary color
+  if (node.id === centerNode.id) {
+    return BRANCH_COLOR_SYSTEM.primary.color; // 正经绿
+  }
+  
+  // Step 3: Find main branches (direct children of center)
+  const mainBranches = connections
+    .filter(c => c.from === centerNode.id)
+    .map(c => allNodes.find(n => n.id === c.to))
+    .filter(Boolean) as MindMapNode[];
+  
+  // Step 4: Check if this node is a main branch
+  const mainBranchIndex = mainBranches.findIndex(branch => branch.id === node.id);
+  if (mainBranchIndex !== -1) {
+    // This is a main branch - assign branch color
+    if (mainBranchIndex < BRANCH_COLOR_SYSTEM.priority.length) {
+      return BRANCH_COLOR_SYSTEM.priority[mainBranchIndex].color;
+    } else {
+      const additionalIndex = (mainBranchIndex - BRANCH_COLOR_SYSTEM.priority.length) % BRANCH_COLOR_SYSTEM.additional.length;
+      return BRANCH_COLOR_SYSTEM.additional[additionalIndex].color;
+    }
+  }
+  
+  // Step 5: Find which main branch this node belongs to
+  const findMainBranchParent = (nodeId: string, visited = new Set<string>()): string | null => {
+    if (visited.has(nodeId)) return null;
+    visited.add(nodeId);
+    
+    // Check if this node is directly connected to center
+    const directConnection = connections.find(c => c.to === nodeId && c.from === centerNode.id);
+    if (directConnection) {
+      return nodeId; // This node is a main branch
+    }
+    
+    // Find parent connection
+    const parentConnection = connections.find(c => c.to === nodeId);
+    if (!parentConnection) return null;
+    
+    // Check if parent is a main branch
+    const isParentMainBranch = mainBranches.some(branch => branch.id === parentConnection.from);
+    if (isParentMainBranch) {
+      return parentConnection.from;
+    }
+    
+    // Keep looking up the tree
+    return findMainBranchParent(parentConnection.from, visited);
+  };
+  
+  const mainBranchParentId = findMainBranchParent(node.id);
+  if (mainBranchParentId) {
+    // Get the main branch's color
+    const mainBranchParent = allNodes.find(n => n.id === mainBranchParentId);
+    if (mainBranchParent) {
+      const branchIndex = mainBranches.findIndex(branch => branch.id === mainBranchParentId);
+      let baseColor: string;
+      
+      if (branchIndex < BRANCH_COLOR_SYSTEM.priority.length) {
+        baseColor = BRANCH_COLOR_SYSTEM.priority[branchIndex].color;
+      } else {
+        const additionalIndex = (branchIndex - BRANCH_COLOR_SYSTEM.priority.length) % BRANCH_COLOR_SYSTEM.additional.length;
+        baseColor = BRANCH_COLOR_SYSTEM.additional[additionalIndex].color;
+      }
+      
+      // Calculate hierarchy level within this branch
+      const getHierarchyLevel = (nodeId: string, branchRootId: string): number => {
+        if (nodeId === branchRootId) return 0;
+        const connection = connections.find(c => c.to === nodeId);
+        if (!connection) return 0;
+        return 1 + getHierarchyLevel(connection.from, branchRootId);
+      };
+      
+      const level = getHierarchyLevel(node.id, mainBranchParentId);
+      return adjustColorBrightness(baseColor, level);
+    }
+  }
+  
+  // Fallback: use primary color
+  return BRANCH_COLOR_SYSTEM.primary.color;
+};
+
+// SMART color brightness adjustment for hierarchy
+const adjustColorBrightness = (hexColor: string, level: number): string => {
+  if (!hexColor || typeof hexColor !== 'string' || !hexColor.startsWith('#')) {
     return BRANCH_COLOR_SYSTEM.primary.color;
   }
   
-  // Simple approach: Find the true center node
-  const rootNodes = allNodes.filter(n => !connections.some(c => c.to === n.id));
-  console.log('All nodes:', allNodes.map(n => ({ id: n.id, label: n.label, type: n.type })));
-  console.log('All connections:', connections);
-  console.log('Root nodes (no incoming connections):', rootNodes.map(n => ({ id: n.id, label: n.label })));
+  // Only apply lightening for sub-levels (level > 0)
+  if (level === 0) return hexColor;
   
-  const isRootNode = rootNodes.some(root => root.id === node.id);
-  console.log('Is', node.label, 'a root node?', isRootNode);
+  const lightenPercent = Math.min(level * 15, 45); // 15% per level, max 45%
   
-  if (isRootNode) {
-    // This is a root/center node
-    if (rootNodes.length === 1) {
-      // Only one root - this is the center
-      console.log('Single root node, using primary color for:', node.label);
-      return BRANCH_COLOR_SYSTEM.primary.color;
-    } else {
-      // Multiple roots - assign different colors to each
-      const rootIndex = rootNodes.findIndex(root => root.id === node.id);
-      console.log('Multiple roots, root index:', rootIndex, 'for:', node.label);
-      
-      if (rootIndex < BRANCH_COLOR_SYSTEM.priority.length) {
-        const color = BRANCH_COLOR_SYSTEM.priority[rootIndex].color;
-        console.log('Assigned priority color:', color, BRANCH_COLOR_SYSTEM.priority[rootIndex].name);
-        return color;
-      } else {
-        const additionalIndex = (rootIndex - BRANCH_COLOR_SYSTEM.priority.length) % BRANCH_COLOR_SYSTEM.additional.length;
-        const color = BRANCH_COLOR_SYSTEM.additional[additionalIndex].color;
-        console.log('Assigned additional color:', color);
-        return color;
-      }
-    }
-  } else {
-    // This is a child node - find its root parent
-    const findRootParent = (nodeId: string): string | null => {
-      const parentConnection = connections.find(c => c.to === nodeId);
-      if (!parentConnection) return null;
-      
-      const parentNode = allNodes.find(n => n.id === parentConnection.from);
-      if (!parentNode) return null;
-      
-      // Check if parent is a root
-      if (rootNodes.some(root => root.id === parentNode.id)) {
-        return parentNode.id;
-      }
-      
-      // Otherwise, keep looking up
-      return findRootParent(parentNode.id);
-    };
-    
-    const rootParentId = findRootParent(node.id);
-    console.log('Finding root parent for', node.label, '- found:', rootParentId);
-    
-    if (rootParentId) {
-      // Get the root parent's color and apply hierarchy lightening
-      const rootParent = allNodes.find(n => n.id === rootParentId);
-      if (rootParent) {
-        const rootIndex = rootNodes.findIndex(root => root.id === rootParentId);
-        let baseColor: string;
-        
-        if (rootNodes.length === 1) {
-          baseColor = BRANCH_COLOR_SYSTEM.primary.color;
-        } else if (rootIndex < BRANCH_COLOR_SYSTEM.priority.length) {
-          baseColor = BRANCH_COLOR_SYSTEM.priority[rootIndex].color;
-        } else {
-          const additionalIndex = (rootIndex - BRANCH_COLOR_SYSTEM.priority.length) % BRANCH_COLOR_SYSTEM.additional.length;
-          baseColor = BRANCH_COLOR_SYSTEM.additional[additionalIndex].color;
-        }
-        
-        // Calculate depth from root
-        const getDepthFromRoot = (nodeId: string, rootId: string): number => {
-          if (nodeId === rootId) return 0;
-          const connection = connections.find(c => c.to === nodeId);
-          if (!connection) return 0;
-          return 1 + getDepthFromRoot(connection.from, rootId);
-        };
-        
-        const depth = getDepthFromRoot(node.id, rootParentId);
-        console.log('Node', node.label, 'depth from root:', depth, 'base color:', baseColor);
-        
-        return adjustColorBrightness(baseColor, depth);
-      }
-    }
-  }
-  
-  // Ultimate fallback - use index-based coloring
-  console.log('Using index-based fallback for:', node.label, 'index:', index);
-  const colorIndex = index % BRANCH_COLOR_SYSTEM.priority.length;
-  return BRANCH_COLOR_SYSTEM.priority[colorIndex].color;
-};
-
-// Adjust color brightness for hierarchy with reset mechanism
-const adjustColorBrightness = (hexColor: string, level: number): string => {
-  // Safety checks
-  if (!hexColor || typeof hexColor !== 'string' || !hexColor.startsWith('#') || hexColor.length !== 7) {
-    return BRANCH_COLOR_SYSTEM.primary.color; // Fallback to primary color
-  }
-  
-  const lightenPercent = Math.min(level * 10, 60); // Max 60% lighter
-  
-  // Convert hex to RGB with error handling
   try {
     const r = parseInt(hexColor.slice(1, 3), 16);
     const g = parseInt(hexColor.slice(3, 5), 16);
     const b = parseInt(hexColor.slice(5, 7), 16);
     
-    // Check for valid RGB values
     if (isNaN(r) || isNaN(g) || isNaN(b)) {
-      return BRANCH_COLOR_SYSTEM.primary.color;
+      return hexColor;
     }
     
-    // Apply lightening
     const factor = lightenPercent / 100;
     const newR = Math.min(255, Math.round(r + (255 - r) * factor));
     const newG = Math.min(255, Math.round(g + (255 - g) * factor));
     const newB = Math.min(255, Math.round(b + (255 - b) * factor));
     
-    // If too light (>90% white), reset to darker version
-    const avgBrightness = (newR + newG + newB) / 3;
-    if (avgBrightness > 230) {
-      return adjustColorBrightness(hexColor, Math.floor(level / 2));
-    }
-    
     return `#${newR.toString(16).padStart(2, '0')}${newG.toString(16).padStart(2, '0')}${newB.toString(16).padStart(2, '0')}`;
   } catch (error) {
-    console.warn('Color adjustment error:', error);
-    return BRANCH_COLOR_SYSTEM.primary.color;
+    return hexColor;
   }
 };
 
-// Problem 32: Smart edge connection points that adjust when nodes move
+// SMART edge connection points that adjust based on position
 const calculateConnectionPoints = (sourceNode: Node, targetNode: Node): { sourceHandle: Position; targetHandle: Position } => {
   const dx = targetNode.position.x - sourceNode.position.x;
   const dy = targetNode.position.y - sourceNode.position.y;
@@ -493,7 +536,7 @@ export default function Tool() {
     setShowFileUpload(false);
   };
 
-  // Problem 32: Handle node position changes and update edge connections
+  // SMART node change handler that updates edge connections
   const handleNodesChange = useCallback((changes: NodeChange[]) => {
     onNodesChange(changes);
     
@@ -621,17 +664,32 @@ export default function Tool() {
       // Calculate optimal positions with overlap prevention
       const positions = calculateOptimalPositions(mindMapData, evolve ? nodes : []);
       
-      // Create React Flow nodes with intelligent color assignment
+      // SMART node creation with hierarchy-based styling
       const flowNodes: Node[] = mindMapData.nodes.map((node, index) => {
         const position = positions.get(node.id) || { x: 0, y: 0 };
+        const backgroundColor = assignBranchColor(node, mindMapData.nodes, mindMapData.connections, index);
         
-        // Safe color assignment with error handling
-        let backgroundColor: string;
-        try {
-          backgroundColor = assignBranchColor(node, mindMapData.nodes, mindMapData.connections, index);
-        } catch (error) {
-          console.warn('Color assignment error:', error);
-          backgroundColor = BRANCH_COLOR_SYSTEM.primary.color; // Fallback to primary color
+        // Determine node importance based on connections
+        const incomingCount = mindMapData.connections.filter(c => c.to === node.id).length;
+        const outgoingCount = mindMapData.connections.filter(c => c.from === node.id).length;
+        const totalConnections = incomingCount + outgoingCount;
+        
+        // Style based on importance and type
+        let fontSize = '14px';
+        let fontWeight = 'normal';
+        let minWidth = '100px';
+        let padding = '12px 16px';
+        
+        if (totalConnections >= 5) { // Center node
+          fontSize = '16px';
+          fontWeight = 'bold';
+          minWidth = '140px';
+          padding = '14px 20px';
+        } else if (totalConnections >= 2) { // Main branch
+          fontSize = '15px';
+          fontWeight = '600';
+          minWidth = '120px';
+          padding = '13px 18px';
         }
         
         return {
@@ -647,10 +705,10 @@ export default function Tool() {
             color: 'white',
             border: 'none',
             borderRadius: '8px',
-            padding: '12px 16px',
-            fontSize: node.type === 'main' ? '16px' : node.type === 'sub' ? '14px' : '12px',
-            fontWeight: node.type === 'main' ? 'bold' : node.type === 'sub' ? '600' : 'normal',
-            minWidth: node.type === 'main' ? '120px' : node.type === 'sub' ? '100px' : '80px',
+            padding,
+            fontSize,
+            fontWeight,
+            minWidth,
             textAlign: 'center',
             wordWrap: 'break-word',
             boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
@@ -659,31 +717,26 @@ export default function Tool() {
         };
       });
 
-      // Create React Flow edges with smart connection points
+      // SMART edge creation with node-matching colors and connection points
       const flowEdges: Edge[] = mindMapData.connections.map((connection, index) => {
         const sourceNode = flowNodes.find(n => n.id === connection.from);
         const targetNode = flowNodes.find(n => n.id === connection.to);
         
-        if (!sourceNode || !targetNode) {
-          return {
-            id: `${connection.from}-${connection.to}`,
-            source: connection.from,
-            target: connection.to,
-            type: 'smoothstep',
-            animated: false,
-            style: { stroke: '#6B7280', strokeWidth: 2 },
-            markerEnd: { type: MarkerType.Arrow }
-          };
-        }
-
-        const { sourceHandle, targetHandle } = calculateConnectionPoints(sourceNode, targetNode);
-        
-        // Safe color extraction with fallback
+        // Use source node's color for the edge
         let strokeColor = '#6B7280'; // Default gray
         if (sourceNode?.style?.background && typeof sourceNode.style.background === 'string') {
           strokeColor = sourceNode.style.background;
         }
-
+        
+        // Calculate optimal connection points
+        let sourceHandle = Position.Right;
+        let targetHandle = Position.Left;
+        if (sourceNode && targetNode) {
+          const connectionPoints = calculateConnectionPoints(sourceNode, targetNode);
+          sourceHandle = connectionPoints.sourceHandle;
+          targetHandle = connectionPoints.targetHandle;
+        }
+        
         return {
           id: `${connection.from}-${connection.to}`,
           source: connection.from,
@@ -693,7 +746,7 @@ export default function Tool() {
           style: { 
             stroke: strokeColor,
             strokeWidth: 2,
-            strokeOpacity: 0.8
+            strokeOpacity: 0.7
           },
           markerEnd: { 
             type: MarkerType.Arrow,
