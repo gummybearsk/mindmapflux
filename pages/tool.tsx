@@ -6,27 +6,27 @@ import dynamic from 'next/dynamic';
 
 // Dynamically import ReactFlow to avoid SSR issues
 const ReactFlow = dynamic(
-  () => import('@xyflow/react').then((mod) => mod.default),
+  () => import('reactflow').then((mod) => mod.default),
   { ssr: false }
 );
 
 const MiniMap = dynamic(
-  () => import('@xyflow/react').then((mod) => mod.MiniMap),
+  () => import('reactflow').then((mod) => mod.MiniMap),
   { ssr: false }
 );
 
 const Controls = dynamic(
-  () => import('@xyflow/react').then((mod) => mod.Controls),
+  () => import('reactflow').then((mod) => mod.Controls),
   { ssr: false }
 );
 
 const Background = dynamic(
-  () => import('@xyflow/react').then((mod) => mod.Background),
+  () => import('reactflow').then((mod) => mod.Background),
   { ssr: false }
 );
 
 // Import types safely
-import type { Node, Edge, NodeChange, EdgeChange } from '@xyflow/react';
+import type { Node, Edge, NodeChange, EdgeChange } from 'reactflow';
 
 // Enhanced interfaces for intelligent mind mapping
 interface MindMapNode {
