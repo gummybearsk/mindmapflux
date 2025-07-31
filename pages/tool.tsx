@@ -1,1155 +1,404 @@
-// pages/tool.tsx - Enhanced AI Mind Mapping Tool (Problems 29-33 Fixed)
-import { useState, useEffect, useCallback, useRef } from 'react';
-import Head from 'next/head';
-import Link from 'next/link';
-import ReactFlow, {
-  MiniMap,
-  Controls,
-  Background,
-  BackgroundVariant,
-  useNodesState,
-  useEdgesState,
-  Node,
-  Edge,
-  NodeChange,
-  MarkerType,
-  Position,
-} from 'reactflow';
-import 'reactflow/dist/style.css';
+// pages/api/mind-map/intelligent-generate.ts - Context-Aware AI Mind Map Generation
+import { NextApiRequest, NextApiResponse } from 'next';
 
-// Interfaces
-interface MindMapNode {
+interface IntelligentMindMapNode {
   id: string;
   label: string;
   type: 'main' | 'sub' | 'detail';
+  level?: number;
+  parentId?: string;
+  semantic_weight?: number;
+  concept_category?: string;
 }
 
-interface MindMapConnection {
+interface IntelligentMindMapConnection {
   from: string;
   to: string;
+  relationship_type?: 'hierarchy' | 'association' | 'dependency';
+  strength?: number;
 }
 
-interface MindMapData {
-  nodes: MindMapNode[];
-  connections: MindMapConnection[];
+interface IntelligentRequest {
+  input: string;
+  isEvolution: boolean;
+  selectedNodeId?: string;
+  focusContext?: string;
+  existingStructure?: {
+    nodes: IntelligentMindMapNode[];
+    connections: IntelligentMindMapConnection[];
+    semantic_map: any;
+  };
+  evolutionIntent: 'expand' | 'restructure' | 'connect' | 'analyze';
+  conversationHistory: string[];
+}
+
+interface IntelligentResponse {
+  nodes: IntelligentMindMapNode[];
+  connections: IntelligentMindMapConnection[];
   analysis: string;
   suggestions: string[];
   context: string;
+  semantic_clusters?: string[][];
+  restructure_recommendations?: string[];
 }
 
-interface ApiResponse {
-  success: boolean;
-  data?: MindMapData;
-  error?: string;
-}
-
-// Smart Dynamic Color Palette - Based on Branch System with Hierarchy
-const BRANCH_COLOR_SYSTEM = {
-  // Primary node color
-  primary: {
-    color: "#2D7D7D", // Teal - 正经绿
-    name: "正经绿"
-  },
-  
-  // Priority branch colors - use these first, don't cycle
-  priority: [
-    { color: "#795F9C", name: "绝绝紫" },
-    { color: "#D85B72", name: "发财红" },
-    { color: "#6B8857", name: "不焦虑" },
-    { color: "#518463", name: "放青松" },
-    { color: "#4C697A", name: "不摆蓝" },
-    { color: "#886441", name: "糖太棕" }
-  ],
-  
-  // Additional logical colors for 7+ branches
-  additional: [
-    { color: "#5D4E37", name: "深棕" },
-    { color: "#2F4F4F", name: "深青" },
-    { color: "#483D8B", name: "深紫" },
-    { color: "#8B7355", name: "暗金" },
-    { color: "#556B2F", name: "橄榄" },
-    { color: "#8B4513", name: "鞍褐" },
-    { color: "#2E8B57", name: "海绿" },
-    { color: "#4682B4", name: "钢蓝" }
-  ]
-};
-
-// Problem 29: File upload functionality for PNG/JSON mind maps
-const FileUploadSection = ({ onFileUpload, isVisible }: { onFileUpload: (file: File) => void; isVisible: boolean }) => {
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file && (file.type === 'application/json' || file.type.startsWith('image/'))) {
-      onFileUpload(file);
-    } else {
-      alert('Please upload a JSON file (previous mind map data) or PNG image (mind map screenshot)');
-    }
-  };
-
-  if (!isVisible) return null;
-
-  return (
-    <div className="mb-4 p-4 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
-      <div className="text-center">
-        <div className="mb-2">
-          <svg className="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
-            <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </div>
-        <p className="text-sm text-gray-600 mb-2">Continue evolving a previous mind map</p>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".json,.png,.jpg,.jpeg"
-          onChange={handleFileUpload}
-          className="hidden"
-        />
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-        >
-          Upload Previous Mind Map
-        </button>
-        <p className="text-xs text-gray-500 mt-1">JSON (data) or PNG/JPG (image)</p>
-      </div>
-    </div>
-  );
-};
-
-// SMART hierarchical positioning - as requested
-const calculateOptimalPositions = (mindMapData: MindMapData, existingNodes: Node[] = []): Map<string, { x: number; y: number }> => {
-  const positions = new Map<string, { x: number; y: number }>();
-  
-  // If evolving, keep existing positions
-  if (existingNodes.length > 0) {
-    existingNodes.forEach(node => {
-      positions.set(node.id, { x: node.position.x, y: node.position.y });
-    });
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // Find center node (most connected)
-  const connectionCounts = new Map<string, number>();
-  mindMapData.nodes.forEach(n => {
-    const incomingCount = mindMapData.connections.filter(c => c.to === n.id).length;
-    const outgoingCount = mindMapData.connections.filter(c => c.from === n.id).length;
-    connectionCounts.set(n.id, incomingCount + outgoingCount);
-  });
-  
-  const centerNode = mindMapData.nodes.reduce((prev, current) => {
-    const prevCount = connectionCounts.get(prev.id) || 0;
-    const currentCount = connectionCounts.get(current.id) || 0;
-    return currentCount > prevCount ? current : prev;
-  });
-  
-  // Position center node at origin
-  if (!positions.has(centerNode.id)) {
-    positions.set(centerNode.id, { x: 0, y: 0 });
-  }
-  
-  // Find and position main branches in a circle around center
-  const mainBranches = mindMapData.connections
-    .filter(c => c.from === centerNode.id)
-    .map(c => mindMapData.nodes.find(n => n.id === c.to))
-    .filter(Boolean) as MindMapNode[];
-  
-  const centerPos = positions.get(centerNode.id)!;
-  const mainRadius = 250;
-  
-  mainBranches.forEach((branch, index) => {
-    if (!positions.has(branch.id)) {
-      const angle = (2 * Math.PI * index) / mainBranches.length;
-      const x = centerPos.x + Math.cos(angle) * mainRadius;
-      const y = centerPos.y + Math.sin(angle) * mainRadius;
-      positions.set(branch.id, { x, y });
-    }
-  });
-  
-  // Position sub-branches for each main branch
-  mainBranches.forEach((mainBranch) => {
-    const mainPos = positions.get(mainBranch.id)!;
-    const subBranches = mindMapData.connections
-      .filter(c => c.from === mainBranch.id)
-      .map(c => mindMapData.nodes.find(n => n.id === c.to))
-      .filter(Boolean) as MindMapNode[];
-    
-    const subRadius = 150;
-    subBranches.forEach((subBranch, index) => {
-      if (!positions.has(subBranch.id)) {
-        const angle = (2 * Math.PI * index) / Math.max(subBranches.length, 1);
-        const x = mainPos.x + Math.cos(angle) * subRadius;
-        const y = mainPos.y + Math.sin(angle) * subRadius;
-        positions.set(subBranch.id, { x, y });
-      }
+  try {
+    const {
+      input,
+      isEvolution,
+      selectedNodeId,
+      focusContext,
+      existingStructure,
+      evolutionIntent,
+      conversationHistory
+    }: IntelligentRequest = req.body;
+
+    console.log('🧠 Intelligent Mind Map Request:', {
+      input: input.substring(0, 100) + '...',
+      isEvolution,
+      selectedNodeId,
+      focusContext,
+      evolutionIntent,
+      hasExistingStructure: !!existingStructure
     });
-    
-    // Position detail nodes for each sub-branch
-    subBranches.forEach((subBranch) => {
-      const subPos = positions.get(subBranch.id)!;
-      const detailNodes = mindMapData.connections
-        .filter(c => c.from === subBranch.id)
-        .map(c => mindMapData.nodes.find(n => n.id === c.to))
-        .filter(Boolean) as MindMapNode[];
-      
-      const detailRadius = 100;
-      detailNodes.forEach((detailNode, index) => {
-        if (!positions.has(detailNode.id)) {
-          const angle = (2 * Math.PI * index) / Math.max(detailNodes.length, 1);
-          const x = subPos.x + Math.cos(angle) * detailRadius;
-          const y = subPos.y + Math.sin(angle) * detailRadius;
-          positions.set(detailNode.id, { x, y });
-        }
-      });
-    });
-  });
 
-  return positions;
-};
-
-// Recursive function to build branch layouts with optimal spacing
-const buildBranchLayout = (
-  parentId: string, 
-  parentPos: { x: number; y: number }, 
-  mindMapData: MindMapData, 
-  positions: Map<string, { x: number; y: number }>,
-  level: number
-) => {
-  const children = mindMapData.connections
-    .filter(c => c.from === parentId)
-    .map(c => mindMapData.nodes.find(n => n.id === c.to))
-    .filter(Boolean) as MindMapNode[];
-
-  if (children.length === 0) return;
-
-  // Calculate optimal spacing based on level and number of children
-  const radiusBase = level === 1 ? 280 : (level === 2 ? 200 : 150);
-  const radius = radiusBase + (children.length - 1) * 20; // Expand radius for more children
-  const angleStep = children.length === 1 ? 0 : (2 * Math.PI) / children.length;
-  const startAngle = level === 1 ? -Math.PI / 2 : 0; // Start main branches at top
-
-  children.forEach((child, index) => {
-    if (positions.has(child.id)) return; // Keep existing position
-
-    const angle = startAngle + (index * angleStep);
-    let x = parentPos.x + Math.cos(angle) * radius;
-    let y = parentPos.y + Math.sin(angle) * radius;
-
-    // Problem 31: Find empty position to avoid overlaps
-    const finalPosition = findOptimalEmptyPosition(
-      [...mindMapData.nodes.map(n => positions.get(n.id)).filter(Boolean) as { x: number; y: number }[]],
-      x, y, 120 // Minimum distance
+    // Build context-aware prompt for OpenAI
+    const intelligentPrompt = buildIntelligentPrompt(
+      input,
+      isEvolution,
+      selectedNodeId,
+      focusContext,
+      existingStructure,
+      evolutionIntent,
+      conversationHistory
     );
 
-    positions.set(child.id, finalPosition);
-    
-    // Recursively position grandchildren
-    buildBranchLayout(child.id, finalPosition, mindMapData, positions, level + 1);
-  });
-};
+    console.log('🎯 Generated Intelligent Prompt:', intelligentPrompt.substring(0, 200) + '...');
 
-// Problem 31: Improved empty position finding with spiral search
-const findOptimalEmptyPosition = (
-  existingPositions: { x: number; y: number }[],
-  preferredX: number,
-  preferredY: number,
-  minDistance: number
-): { x: number; y: number } => {
-  
-  // Check if preferred position is available
-  const isPositionFree = (x: number, y: number) => {
-    return existingPositions.every(pos => {
-      const distance = Math.sqrt((x - pos.x) ** 2 + (y - pos.y) ** 2);
-      return distance >= minDistance;
+    // Call OpenAI with intelligent prompt
+    const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4',
+        messages: [
+          {
+            role: 'system',
+            content: `You are an intelligent mind mapping AI that understands context, structure, and logical relationships. You create dynamic mind maps that evolve intelligently based on user input and existing structure.
+
+Your capabilities:
+- Understand existing mind map structure and relationships
+- Expand specific nodes logically when requested
+- Cluster and group related concepts semantically  
+- Restructure layouts to reflect refined logic
+- Create meaningful connections between ideas
+- Maintain hierarchical relationships
+- Assign semantic weights and categories
+
+Always respond with valid JSON in the exact format specified.`
+          },
+          {
+            role: 'user',
+            content: intelligentPrompt
+          }
+        ],
+        temperature: 0.7,
+        max_tokens: 2000
+      })
     });
-  };
 
-  if (isPositionFree(preferredX, preferredY)) {
-    return { x: preferredX, y: preferredY };
-  }
+    if (!openAIResponse.ok) {
+      const errorText = await openAIResponse.text();
+      console.error('OpenAI API Error:', openAIResponse.status, errorText);
+      throw new Error(`OpenAI API error: ${openAIResponse.status}`);
+    }
 
-  // Spiral search for empty position
-  const maxRadius = 500;
-  const stepSize = 30;
-  
-  for (let radius = stepSize; radius <= maxRadius; radius += stepSize) {
-    const steps = Math.max(8, Math.floor(radius * 0.1)); // More steps for larger radius
-    
-    for (let i = 0; i < steps; i++) {
-      const angle = (2 * Math.PI * i) / steps;
-      const x = preferredX + Math.cos(angle) * radius;
-      const y = preferredY + Math.sin(angle) * radius;
+    const aiResult = await openAIResponse.json();
+    const aiContent = aiResult.choices[0]?.message?.content;
+
+    if (!aiContent) {
+      throw new Error('No content received from OpenAI');
+    }
+
+    console.log('🤖 Raw AI Response:', aiContent.substring(0, 300) + '...');
+
+    // Parse AI response
+    let parsedResponse: IntelligentResponse;
+    try {
+      // Clean the response to extract JSON
+      const cleanedContent = aiContent.replace(/```json\n?|\n?```/g, '').trim();
+      parsedResponse = JSON.parse(cleanedContent);
+    } catch (parseError) {
+      console.error('Failed to parse AI response:', parseError);
+      console.error('AI Content:', aiContent);
       
-      if (isPositionFree(x, y)) {
-        return { x, y };
-      }
+      // Fallback: create a basic response
+      parsedResponse = createFallbackResponse(input, isEvolution, existingStructure);
     }
-  }
 
-  // Fallback to preferred position with small random offset
-  return {
-    x: preferredX + (Math.random() - 0.5) * 100,
-    y: preferredY + (Math.random() - 0.5) * 100
-  };
-};
+    // Validate and enhance the response
+    const validatedResponse = validateAndEnhanceResponse(parsedResponse, existingStructure, evolutionIntent);
 
-// SMART branch-based color assignment - as requested
-const assignBranchColor = (
-  node: MindMapNode, 
-  allNodes: MindMapNode[], 
-  connections: MindMapConnection[],
-  index: number
-): string => {
-  
-  // Step 1: Find the center node (most connected or first node)
-  const connectionCounts = new Map<string, number>();
-  allNodes.forEach(n => {
-    const incomingCount = connections.filter(c => c.to === n.id).length;
-    const outgoingCount = connections.filter(c => c.from === n.id).length;
-    connectionCounts.set(n.id, incomingCount + outgoingCount);
-  });
-  
-  // Center node is the one with most connections, or first node if tie
-  const centerNode = allNodes.reduce((prev, current) => {
-    const prevCount = connectionCounts.get(prev.id) || 0;
-    const currentCount = connectionCounts.get(current.id) || 0;
-    return currentCount > prevCount ? current : prev;
-  });
-  
-  // Step 2: If this is the center node, use primary color
-  if (node.id === centerNode.id) {
-    return BRANCH_COLOR_SYSTEM.primary.color; // 正经绿
-  }
-  
-  // Step 3: Find main branches (direct children of center)
-  const mainBranches = connections
-    .filter(c => c.from === centerNode.id)
-    .map(c => allNodes.find(n => n.id === c.to))
-    .filter(Boolean) as MindMapNode[];
-  
-  // Step 4: Check if this node is a main branch
-  const mainBranchIndex = mainBranches.findIndex(branch => branch.id === node.id);
-  if (mainBranchIndex !== -1) {
-    // This is a main branch - assign branch color
-    if (mainBranchIndex < BRANCH_COLOR_SYSTEM.priority.length) {
-      return BRANCH_COLOR_SYSTEM.priority[mainBranchIndex].color;
-    } else {
-      const additionalIndex = (mainBranchIndex - BRANCH_COLOR_SYSTEM.priority.length) % BRANCH_COLOR_SYSTEM.additional.length;
-      return BRANCH_COLOR_SYSTEM.additional[additionalIndex].color;
-    }
-  }
-  
-  // Step 5: Find which main branch this node belongs to
-  const findMainBranchParent = (nodeId: string, visited = new Set<string>()): string | null => {
-    if (visited.has(nodeId)) return null;
-    visited.add(nodeId);
-    
-    // Check if this node is directly connected to center
-    const directConnection = connections.find(c => c.to === nodeId && c.from === centerNode.id);
-    if (directConnection) {
-      return nodeId; // This node is a main branch
-    }
-    
-    // Find parent connection
-    const parentConnection = connections.find(c => c.to === nodeId);
-    if (!parentConnection) return null;
-    
-    // Check if parent is a main branch
-    const isParentMainBranch = mainBranches.some(branch => branch.id === parentConnection.from);
-    if (isParentMainBranch) {
-      return parentConnection.from;
-    }
-    
-    // Keep looking up the tree
-    return findMainBranchParent(parentConnection.from, visited);
-  };
-  
-  const mainBranchParentId = findMainBranchParent(node.id);
-  if (mainBranchParentId) {
-    // Get the main branch's color
-    const mainBranchParent = allNodes.find(n => n.id === mainBranchParentId);
-    if (mainBranchParent) {
-      const branchIndex = mainBranches.findIndex(branch => branch.id === mainBranchParentId);
-      let baseColor: string;
-      
-      if (branchIndex < BRANCH_COLOR_SYSTEM.priority.length) {
-        baseColor = BRANCH_COLOR_SYSTEM.priority[branchIndex].color;
-      } else {
-        const additionalIndex = (branchIndex - BRANCH_COLOR_SYSTEM.priority.length) % BRANCH_COLOR_SYSTEM.additional.length;
-        baseColor = BRANCH_COLOR_SYSTEM.additional[additionalIndex].color;
-      }
-      
-      // Calculate hierarchy level within this branch
-      const getHierarchyLevel = (nodeId: string, branchRootId: string): number => {
-        if (nodeId === branchRootId) return 0;
-        const connection = connections.find(c => c.to === nodeId);
-        if (!connection) return 0;
-        return 1 + getHierarchyLevel(connection.from, branchRootId);
-      };
-      
-      const level = getHierarchyLevel(node.id, mainBranchParentId);
-      return adjustColorBrightness(baseColor, level);
-    }
-  }
-  
-  // Fallback: use primary color
-  return BRANCH_COLOR_SYSTEM.primary.color;
-};
+    console.log('✅ Final Validated Response:', {
+      nodeCount: validatedResponse.nodes.length,
+      connectionCount: validatedResponse.connections.length,
+      hasClusters: !!validatedResponse.semantic_clusters
+    });
 
-// SMART color brightness adjustment for hierarchy
-const adjustColorBrightness = (hexColor: string, level: number): string => {
-  if (!hexColor || typeof hexColor !== 'string' || !hexColor.startsWith('#')) {
-    return BRANCH_COLOR_SYSTEM.primary.color;
-  }
-  
-  // Only apply lightening for sub-levels (level > 0)
-  if (level === 0) return hexColor;
-  
-  const lightenPercent = Math.min(level * 15, 45); // 15% per level, max 45%
-  
-  try {
-    const r = parseInt(hexColor.slice(1, 3), 16);
-    const g = parseInt(hexColor.slice(3, 5), 16);
-    const b = parseInt(hexColor.slice(5, 7), 16);
-    
-    if (isNaN(r) || isNaN(g) || isNaN(b)) {
-      return hexColor;
-    }
-    
-    const factor = lightenPercent / 100;
-    const newR = Math.min(255, Math.round(r + (255 - r) * factor));
-    const newG = Math.min(255, Math.round(g + (255 - g) * factor));
-    const newB = Math.min(255, Math.round(b + (255 - b) * factor));
-    
-    return `#${newR.toString(16).padStart(2, '0')}${newG.toString(16).padStart(2, '0')}${newB.toString(16).padStart(2, '0')}`;
+    res.status(200).json({
+      success: true,
+      data: validatedResponse
+    });
+
   } catch (error) {
-    return hexColor;
+    console.error('Intelligent mind map generation error:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred'
+    });
   }
-};
+}
 
-// SMART edge connection points that adjust based on position
-const calculateConnectionPoints = (sourceNode: Node, targetNode: Node): { sourceHandle: Position; targetHandle: Position } => {
-  const dx = targetNode.position.x - sourceNode.position.x;
-  const dy = targetNode.position.y - sourceNode.position.y;
-  
-  // Determine optimal connection sides based on relative positions
-  let sourceHandle: Position;
-  let targetHandle: Position;
-  
-  if (Math.abs(dx) > Math.abs(dy)) {
-    // Horizontal connection is dominant
-    if (dx > 0) {
-      sourceHandle = Position.Right;
-      targetHandle = Position.Left;
-    } else {
-      sourceHandle = Position.Left;
-      targetHandle = Position.Right;
-    }
+function buildIntelligentPrompt(
+  input: string,
+  isEvolution: boolean,
+  selectedNodeId?: string,
+  focusContext?: string,
+  existingStructure?: any,
+  evolutionIntent?: string,
+  conversationHistory?: string[]
+): string {
+  let prompt = '';
+
+  if (isEvolution && existingStructure) {
+    // Evolution mode: build on existing structure
+    prompt += `EVOLUTION MODE: Intelligently evolve an existing mind map.
+
+EXISTING MIND MAP STRUCTURE:
+Nodes: ${JSON.stringify(existingStructure.nodes, null, 2)}
+Connections: ${JSON.stringify(existingStructure.connections, null, 2)}
+
+EVOLUTION CONTEXT:
+- User Input: "${input}"
+- Evolution Intent: ${evolutionIntent}
+- Selected Node: ${selectedNodeId ? `"${selectedNodeId}" (${focusContext})` : 'None'}
+- Conversation History: ${conversationHistory?.join(' → ') || 'None'}
+
+INSTRUCTIONS:
+${getEvolutionInstructions(evolutionIntent, selectedNodeId, focusContext)}
+
+Create ONLY the NEW or MODIFIED nodes and connections that should be added/changed.
+Maintain logical hierarchy and semantic relationships.
+Ensure new content logically extends from the selected node or fits semantically within the existing structure.`;
+
   } else {
-    // Vertical connection is dominant
-    if (dy > 0) {
-      sourceHandle = Position.Bottom;
-      targetHandle = Position.Top;
-    } else {
-      sourceHandle = Position.Top;
-      targetHandle = Position.Bottom;
-    }
+    // New mind map mode
+    prompt += `NEW MIND MAP MODE: Create a comprehensive mind map from scratch.
+
+USER INPUT: "${input}"
+
+INSTRUCTIONS:
+- Analyze the input to identify the main concept and key components
+- Create a hierarchical structure with logical relationships
+- Assign semantic weights based on importance (1-5 scale)
+- Group related concepts into semantic clusters
+- Create meaningful connections between ideas
+- Ensure comprehensive coverage of the topic`;
   }
-  
-  return { sourceHandle, targetHandle };
-};
 
-export default function Tool() {
-  const [input, setInput] = useState('');
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [currentStep, setCurrentStep] = useState<'input' | 'generating' | 'complete'>('input');
-  const [analysis, setAnalysis] = useState('');
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [conversationHistory, setConversationHistory] = useState<string[]>([]);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [loadingMessage, setLoadingMessage] = useState('Analyzing your thoughts...');
-  const [showFileUpload, setShowFileUpload] = useState(false);
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const [showFullscreenInput, setShowFullscreenInput] = useState(true);
+  prompt += `
 
-  // Problem 30: Clear session data on component mount (no cross-session memory)
-  useEffect(() => {
-    // Clear any potential session data
-    setNodes([]);
-    setEdges([]);
-    setConversationHistory([]);
-    setAnalysis('');
-    setSuggestions([]);
-    // Note: No localStorage or sessionStorage used - everything is in-memory only
-  }, []);
+RESPONSE FORMAT (Valid JSON only):
+{
+  "nodes": [
+    {
+      "id": "unique-id",
+      "label": "Node Label", 
+      "type": "main|sub|detail",
+      "level": 0,
+      "parentId": "parent-node-id",
+      "semantic_weight": 3,
+      "concept_category": "category"
+    }
+  ],
+  "connections": [
+    {
+      "from": "parent-id",
+      "to": "child-id", 
+      "relationship_type": "hierarchy|association|dependency",
+      "strength": 2
+    }
+  ],
+  "analysis": "Brief analysis of the mind map structure and key insights",
+  "suggestions": ["Suggestion 1", "Suggestion 2", "Suggestion 3"],
+  "context": "Context about how this mind map addresses the user's input",
+  "semantic_clusters": [["related", "concepts"], ["another", "cluster"]],
+  "restructure_recommendations": ["Recommendation 1", "Recommendation 2"]
+}
 
-  // Problem 28: Rotating loading messages
-  const loadingMessages = [
-    'Analyzing your thoughts...',
-    'Mapping connections...',
-    'Organizing ideas...',
-    'Building structure...',
-    'Finalizing mind map...'
+IMPORTANT:
+- Use descriptive, meaningful labels
+- Create logical parent-child relationships
+- Assign appropriate semantic weights (higher = more important)
+- Include 3-5 intelligent suggestions for further evolution
+- Ensure JSON is valid and parseable`;
+
+  return prompt;
+}
+
+function getEvolutionInstructions(
+  evolutionIntent?: string,
+  selectedNodeId?: string,
+  focusContext?: string
+): string {
+  switch (evolutionIntent) {
+    case 'expand':
+      return selectedNodeId
+        ? `EXPAND the selected node "${focusContext}" by creating logical sub-nodes and connections. 
+         Focus specifically on breaking down this concept into detailed components.
+         All new nodes should be children or descendants of the selected node.`
+        : `EXPAND the mind map by adding new branches and detailed sub-components.
+         Add depth and breadth to existing concepts.`;
+
+    case 'restructure':
+      return `RESTRUCTURE the mind map to better organize and group related concepts.
+         Identify semantic clusters and reorganize connections for clearer logic.
+         May involve changing hierarchy levels and relationship types.`;
+
+    case 'connect':
+      return `CREATE NEW CONNECTIONS between existing concepts that should be related.
+         Focus on finding associations, dependencies, and cross-links between different branches.
+         Add relationship connections that enhance understanding.`;
+
+    case 'analyze':
+      return `ANALYZE the existing structure and ADD analytical insights.
+         Create new nodes that represent analysis, conclusions, implications, or insights.
+         Focus on meta-level thinking about the existing concepts.`;
+
+    default:
+      return `INTELLIGENTLY EVOLVE the mind map based on the user's input.
+         Determine the best approach (expand, restructure, connect, or analyze) based on context.`;
+  }
+}
+
+function createFallbackResponse(
+  input: string,
+  isEvolution: boolean,
+  existingStructure?: any
+): IntelligentResponse {
+  console.log('🚨 Creating fallback response due to AI parsing failure');
+
+  // Create basic nodes based on input
+  const mainConcept = input.substring(0, 50).trim();
+  const fallbackNodes: IntelligentMindMapNode[] = [
+    {
+      id: 'main-concept',
+      label: mainConcept,
+      type: 'main',
+      level: 0,
+      semantic_weight: 5,
+      concept_category: 'core'
+    },
+    {
+      id: 'analysis-branch',
+      label: 'Analysis',
+      type: 'sub',
+      level: 1,
+      parentId: 'main-concept',
+      semantic_weight: 3,
+      concept_category: 'analysis'
+    },
+    {
+      id: 'implementation-branch',
+      label: 'Implementation',
+      type: 'sub',
+      level: 1,
+      parentId: 'main-concept',
+      semantic_weight: 3,
+      concept_category: 'action'
+    }
   ];
 
-  useEffect(() => {
-    if (isGenerating) {
-      const interval = setInterval(() => {
-        setLoadingMessage(prev => {
-          const currentIndex = loadingMessages.indexOf(prev);
-          const nextIndex = (currentIndex + 1) % loadingMessages.length;
-          return loadingMessages[nextIndex];
-        });
-      }, 2000);
-
-      return () => clearInterval(interval);
+  const fallbackConnections: IntelligentMindMapConnection[] = [
+    {
+      from: 'main-concept',
+      to: 'analysis-branch',
+      relationship_type: 'hierarchy',
+      strength: 2
+    },
+    {
+      from: 'main-concept',
+      to: 'implementation-branch',
+      relationship_type: 'hierarchy',
+      strength: 2
     }
-  }, [isGenerating]);
+  ];
 
-  // Problem 29: Handle file upload for previous mind maps
-  const handleFileUpload = async (file: File) => {
-    setUploadedFile(file);
-    
-    if (file.type === 'application/json') {
-      // Handle JSON file - previous mind map data
-      try {
-        const text = await file.text();
-        const data = JSON.parse(text);
-        
-        if (data.nodes && data.edges) {
-          // Restore previous mind map
-          setNodes(data.nodes);
-          setEdges(data.edges);
-          setCurrentStep('complete');
-          setAnalysis(data.analysis || 'Restored from previous session');
-          setSuggestions(data.suggestions || []);
-        }
-      } catch (error) {
-        alert('Invalid JSON file. Please upload a valid mind map data file.');
-      }
-    } else if (file.type.startsWith('image/')) {
-      // Handle image file - will use AI to analyze the image content
-      setInput(`Continue evolving this mind map based on the uploaded image: ${file.name}`);
-    }
-    
-    setShowFileUpload(false);
+  return {
+    nodes: fallbackNodes,
+    connections: fallbackConnections,
+    analysis: `Basic mind map created for: ${mainConcept}`,
+    suggestions: [
+      'Expand on the analysis components',
+      'Add more implementation details',
+      'Consider potential challenges'
+    ],
+    context: 'Fallback mind map generated due to processing constraints',
+    semantic_clusters: [['analysis'], ['implementation']]
   };
+}
 
-  // SMART node change handler that updates edge connections
-  const handleNodesChange = useCallback((changes: NodeChange[]) => {
-    onNodesChange(changes);
-    
-    // Update edge connection points when nodes are moved
-    changes.forEach(change => {
-      if (change.type === 'position' && change.position) {
-        setEdges(currentEdges => 
-          currentEdges.map(edge => {
-            const sourceNode = nodes.find(n => n.id === edge.source);
-            const targetNode = nodes.find(n => n.id === edge.target);
-            
-            if (sourceNode && targetNode && (edge.source === change.id || edge.target === change.id)) {
-              const { sourceHandle, targetHandle } = calculateConnectionPoints(sourceNode, targetNode);
-              return {
-                ...edge,
-                sourceHandle,
-                targetHandle
-              };
-            }
-            return edge;
-          })
-        );
-      }
-    });
-  }, [nodes, onNodesChange, setEdges]);
+function validateAndEnhanceResponse(
+  response: IntelligentResponse,
+  existingStructure?: any,
+  evolutionIntent?: string
+): IntelligentResponse {
+  // Ensure all nodes have required fields
+  const validatedNodes = response.nodes.map((node, index) => ({
+    id: node.id || `node-${Date.now()}-${index}`,
+    label: node.label || 'Untitled Node',
+    type: node.type || 'main',
+    level: node.level || 0,
+    parentId: node.parentId,
+    semantic_weight: node.semantic_weight || 1,
+    concept_category: node.concept_category || 'general'
+  }));
 
-  const generateMindMap = async (evolve = false) => {
-    if (!input.trim() && !uploadedFile) return;
+  // Ensure all connections are valid
+  const nodeIds = new Set(validatedNodes.map(n => n.id));
+  const validatedConnections = response.connections.filter(conn => 
+    nodeIds.has(conn.from) && nodeIds.has(conn.to)
+  ).map(conn => ({
+    from: conn.from,
+    to: conn.to,
+    relationship_type: conn.relationship_type || 'hierarchy',
+    strength: conn.strength || 1
+  }));
 
-    setIsGenerating(true);
-    setCurrentStep('generating');
-    
-    try {
-      let response;
-      
-      if (uploadedFile) {
-        // Use FormData only when file is uploaded
-        const formData = new FormData();
-        formData.append('input', input.trim());
-        formData.append('isEvolution', evolve.toString());
-        formData.append('file', uploadedFile);
-        
-        if (evolve) {
-          const existingData = {
-            nodes: nodes.map(node => ({
-              id: node.id,
-              label: node.data?.label || 'Unknown',
-              type: node.data?.type || 'main',
-              position: node.position,
-              color: typeof node.style?.background === 'string' ? node.style.background : undefined
-            })),
-            edges: edges.map(edge => ({
-              from: edge.source,
-              to: edge.target
-            })),
-            conversationHistory
-          };
-          formData.append('existingNodes', JSON.stringify(existingData));
-        }
+  // Ensure we have suggestions
+  const suggestions = response.suggestions && response.suggestions.length > 0
+    ? response.suggestions
+    : [
+        'Expand with more detailed sub-components',
+        'Add implementation considerations',
+        'Explore potential challenges and solutions'
+      ];
 
-        response = await fetch('/api/mind-map/generate', {
-          method: 'POST',
-          body: formData
-        });
-      } else {
-        // Use JSON format for regular requests (maintains backend compatibility)
-        const requestBody: any = {
-          input: input.trim(),
-          isEvolution: evolve,
-          conversationHistory
-        };
-
-        if (evolve) {
-          const existingData = {
-            nodes: nodes.map(node => ({
-              id: node.id,
-              label: node.data?.label || 'Unknown',
-              type: node.data?.type || 'main',
-              position: node.position,
-              color: typeof node.style?.background === 'string' ? node.style.background : undefined
-            })),
-            edges: edges.map(edge => ({
-              from: edge.source,
-              to: edge.target
-            })),
-            conversationHistory
-          };
-          requestBody.existingNodes = existingData.nodes;
-        }
-
-        response = await fetch('/api/mind-map/generate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(requestBody)
-        });
-      }
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('API Error Response:', response.status, errorText);
-        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
-      }
-      
-      const result = await response.json();
-      console.log('API Response:', result); // Debug logging
-      
-      // Handle different possible response formats from backend
-      let mindMapData: MindMapData;
-      
-      if (result.success && result.data) {
-        // Format 1: { success: true, data: MindMapData }
-        mindMapData = result.data;
-      } else if (result.nodes && result.connections) {
-        // Format 2: Direct MindMapData object
-        mindMapData = result as MindMapData;
-      } else if (result.mindMap) {
-        // Format 3: { mindMap: MindMapData }
-        mindMapData = result.mindMap;
-      } else {
-        // Error case
-        console.error('API returned error or unexpected format:', result);
-        throw new Error(result.error || result.message || 'Failed to generate mind map');
-      }
-      
-      // Calculate optimal positions with overlap prevention
-      const positions = calculateOptimalPositions(mindMapData, evolve ? nodes : []);
-      
-      // SMART node creation with hierarchy-based styling
-      const flowNodes: Node[] = mindMapData.nodes.map((node, index) => {
-        const position = positions.get(node.id) || { x: 0, y: 0 };
-        const backgroundColor = assignBranchColor(node, mindMapData.nodes, mindMapData.connections, index);
-        
-        // Determine node importance based on connections
-        const incomingCount = mindMapData.connections.filter(c => c.to === node.id).length;
-        const outgoingCount = mindMapData.connections.filter(c => c.from === node.id).length;
-        const totalConnections = incomingCount + outgoingCount;
-        
-        // Style based on importance and type
-        let fontSize = '14px';
-        let fontWeight = 'normal';
-        let minWidth = '100px';
-        let padding = '12px 16px';
-        
-        if (totalConnections >= 5) { // Center node
-          fontSize = '16px';
-          fontWeight = 'bold';
-          minWidth = '140px';
-          padding = '14px 20px';
-        } else if (totalConnections >= 2) { // Main branch
-          fontSize = '15px';
-          fontWeight = '600';
-          minWidth = '120px';
-          padding = '13px 18px';
-        }
-        
-        return {
-          id: node.id,
-          type: 'default',
-          position,
-          data: { 
-            label: node.label,
-            type: node.type
-          },
-          style: {
-            background: backgroundColor,
-            color: 'white',
-            border: 'none',
-            borderRadius: '8px',
-            padding,
-            fontSize,
-            fontWeight,
-            minWidth,
-            textAlign: 'center',
-            wordWrap: 'break-word',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
-          },
-          draggable: true
-        };
-      });
-
-      // SMART edge creation with node-matching colors and connection points
-      const flowEdges: Edge[] = mindMapData.connections.map((connection, index) => {
-        const sourceNode = flowNodes.find(n => n.id === connection.from);
-        const targetNode = flowNodes.find(n => n.id === connection.to);
-        
-        // Use source node's color for the edge
-        let strokeColor = '#6B7280'; // Default gray
-        if (sourceNode?.style?.background && typeof sourceNode.style.background === 'string') {
-          strokeColor = sourceNode.style.background;
-        }
-        
-        // Calculate optimal connection points
-        let sourceHandle = Position.Right;
-        let targetHandle = Position.Left;
-        if (sourceNode && targetNode) {
-          const connectionPoints = calculateConnectionPoints(sourceNode, targetNode);
-          sourceHandle = connectionPoints.sourceHandle;
-          targetHandle = connectionPoints.targetHandle;
-        }
-        
-        return {
-          id: `${connection.from}-${connection.to}`,
-          source: connection.from,
-          target: connection.to,
-          type: 'smoothstep',
-          animated: false,
-          style: { 
-            stroke: strokeColor,
-            strokeWidth: 2,
-            strokeOpacity: 0.7
-          },
-          markerEnd: { 
-            type: MarkerType.Arrow,
-            color: strokeColor
-          },
-          sourceHandle,
-          targetHandle
-        };
-      });
-
-      if (evolve) {
-        // Evolution: add new nodes/edges to existing ones
-        setNodes(prev => [...prev, ...flowNodes.filter(node => !prev.some(p => p.id === node.id))]);
-        setEdges(prev => [...prev, ...flowEdges.filter(edge => !prev.some(p => p.id === edge.id))]);
-      } else {
-        // New mind map: replace all nodes/edges
-        setNodes(flowNodes);
-        setEdges(flowEdges);
-      }
-
-      setAnalysis(mindMapData.analysis);
-      setSuggestions(mindMapData.suggestions);
-      setConversationHistory(prev => [...prev, input.trim()]);
-      setCurrentStep('complete');
-      
-    } catch (error) {
-      console.error('Error generating mind map:', error);
-      
-      // More user-friendly error messages
-      let errorMessage = 'Failed to generate mind map. ';
-      if (error instanceof Error) {
-        if (error.message.includes('HTTP error')) {
-          errorMessage += 'Server error occurred. Please check your backend API.';
-        } else if (error.message.includes('fetch')) {
-          errorMessage += 'Network error. Please check your connection.';
-        } else {
-          errorMessage += error.message;
-        }
-      } else {
-        errorMessage += 'Unknown error occurred.';
-      }
-      
-      alert(errorMessage);
-    } finally {
-      setIsGenerating(false);
-      setUploadedFile(null);
-    }
+  return {
+    nodes: validatedNodes,
+    connections: validatedConnections,
+    analysis: response.analysis || 'Mind map structure created successfully',
+    suggestions,
+    context: response.context || 'Context-aware mind map generated',
+    semantic_clusters: response.semantic_clusters || [],
+    restructure_recommendations: response.restructure_recommendations || []
   };
-
-  const exportMindMap = (format: 'json' | 'png') => {
-    if (format === 'json') {
-      const data = {
-        nodes: nodes.map(node => ({
-          id: node.id,
-          label: node.data?.label || 'Unknown',
-          type: node.data?.type || 'main',
-          position: node.position,
-          color: typeof node.style?.background === 'string' ? node.style.background : undefined
-        })),
-        edges: edges.map(edge => ({
-          from: edge.source,
-          to: edge.target
-        })),
-        analysis,
-        suggestions,
-        conversationHistory,
-        timestamp: new Date().toISOString()
-      };
-      
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'mindmap-data.json';
-      a.click();
-      URL.revokeObjectURL(url);
-    } else if (format === 'png') {
-      // PNG export would require additional canvas rendering
-      alert('PNG export coming soon! Use JSON export for now to save your mind map data.');
-    }
-  };
-
-  const startOver = () => {
-    setNodes([]);
-    setEdges([]);
-    setInput('');
-    setAnalysis('');
-    setSuggestions([]);
-    setConversationHistory([]);
-    setCurrentStep('input');
-    setIsFullscreen(false);
-    setShowFullscreenInput(true);
-    setUploadedFile(null);
-  };
-
-  // Problem 33: Fullscreen input interface
-  return (
-    <>
-      <Head>
-        <title>AI Mind Mapping Tool - MindMapFlux</title>
-        <meta name="description" content="Create dynamic, AI-powered mind maps that evolve with your thoughts" />
-      </Head>
-
-      <div className={`min-h-screen bg-white ${isFullscreen ? 'fixed inset-0 z-50' : ''}`}>
-        {/* Navigation Header - Hidden in fullscreen */}
-        {!isFullscreen && (
-          <nav className="bg-white border-b border-gray-200">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="flex justify-between h-16">
-                <div className="flex items-center">
-                  <Link href="/" className="text-xl font-bold text-gray-900">
-                    MindMapFlux
-                  </Link>
-                </div>
-                <div className="flex items-center space-x-8">
-                  <Link href="/how-it-works" className="text-gray-700 hover:text-gray-900">How It Works</Link>
-                  <Link href="/mind-mapping-guide" className="text-gray-700 hover:text-gray-900">Guide</Link>
-                  <Link href="/business-mind-mapping" className="text-gray-700 hover:text-gray-900">Business</Link>
-                  <Link href="/about" className="text-gray-700 hover:text-gray-900">About</Link>
-                </div>
-              </div>
-            </div>
-          </nav>
-        )}
-
-        {/* Problem 33: Fullscreen Input Hover Box - Toggleable */}
-        {isFullscreen && currentStep === 'complete' && showFullscreenInput && (
-          <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 bg-white p-4 rounded-lg shadow-lg border max-w-md w-full mx-4">
-            <div className="mb-3">
-              <input
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Continue evolving your mind map..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                onKeyPress={(e) => e.key === 'Enter' && generateMindMap(true)}
-              />
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => generateMindMap(true)}
-                disabled={!input.trim()}
-                className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 text-sm"
-              >
-                Continue
-              </button>
-              <button
-                onClick={() => setShowFileUpload(true)}
-                className="bg-gray-600 text-white px-3 py-2 rounded-md hover:bg-gray-700 text-sm"
-              >
-                📁
-              </button>
-            </div>
-            
-            {/* Problem 33: AI Suggestions in fullscreen */}
-            {suggestions.length > 0 && (
-              <div className="mt-3 pt-3 border-t">
-                <p className="text-xs text-gray-600 mb-2">AI Suggestions:</p>
-                <div className="flex flex-wrap gap-1">
-                  {suggestions.slice(0, 3).map((suggestion, index) => (
-                    <button
-                      key={index}
-                      onClick={() => setInput(suggestion)}
-                      className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded hover:bg-blue-100"
-                    >
-                      {suggestion.length > 25 ? suggestion.substring(0, 25) + '...' : suggestion}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Problem 23: Exit Fullscreen Button + Input Toggle */}
-        {isFullscreen && (
-          <div className="fixed top-4 right-4 z-50 flex gap-2">
-            <button
-              onClick={() => setShowFullscreenInput(!showFullscreenInput)}
-              className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 shadow-lg flex items-center"
-              title={showFullscreenInput ? "Hide input box" : "Show input box"}
-            >
-              {showFullscreenInput ? (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              ) : (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                </svg>
-              )}
-            </button>
-            <button
-              onClick={() => {
-                setIsFullscreen(false);
-                setShowFullscreenInput(true);
-              }}
-              className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 shadow-lg"
-            >
-              Exit Fullscreen
-            </button>
-          </div>
-        )}
-
-        <div className={`${isFullscreen ? 'h-screen' : 'max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8'}`}>
-          <div className={isFullscreen ? 'h-full flex flex-col' : ''}>
-            
-            {/* Step 1: Input Interface */}
-            {currentStep === 'input' && !isFullscreen && (
-              <div className="max-w-4xl mx-auto">
-                <div className="text-center mb-8">
-                  <h1 className="text-3xl font-bold text-gray-900 mb-4">
-                    AI-Powered Mind Mapping Tool
-                  </h1>
-                  <p className="text-lg text-gray-600">
-                    Transform your thoughts into dynamic, evolving mind maps
-                  </p>
-                </div>
-
-                {/* Problem 29: File Upload Section */}
-                <div className="mb-6">
-                  <button
-                    onClick={() => setShowFileUpload(!showFileUpload)}
-                    className="w-full text-left p-3 bg-gray-50 rounded-lg border hover:bg-gray-100 transition-colors"
-                  >
-                    <span className="text-sm text-gray-700">
-                      💡 Have a previous mind map? Upload it to continue evolving
-                    </span>
-                  </button>
-                </div>
-
-                <FileUploadSection 
-                  onFileUpload={handleFileUpload}
-                  isVisible={showFileUpload}
-                />
-
-                {/* Input Section */}
-                <div className="mb-6">
-                  <label htmlFor="thought-input" className="block text-lg font-medium text-gray-700 mb-3">
-                    Share your thoughts, ideas, or challenges:
-                  </label>
-                  <textarea
-                    id="thought-input"
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    placeholder="Example: I want to start a food business in Huangshan focusing on local cuisine and tourism..."
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    rows={4}
-                  />
-                </div>
-
-                <div className="text-center">
-                  <button
-                    onClick={() => generateMindMap(false)}
-                    disabled={!input.trim() && !uploadedFile}
-                    className="bg-blue-600 text-white px-8 py-3 rounded-lg text-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    Create Mind Map
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Step 2: Generating State */}
-            {currentStep === 'generating' && (
-              <div className="max-w-2xl mx-auto text-center py-16">
-                <div className="mb-6">
-                  <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto"></div>
-                </div>
-                <h2 className="text-2xl font-semibold text-gray-900 mb-2">
-                  Creating Your Mind Map
-                </h2>
-                <p className="text-gray-600">
-                  {loadingMessage}
-                </p>
-              </div>
-            )}
-
-            {/* Step 3: Complete Mind Map */}
-            {currentStep === 'complete' && (
-              <div className={isFullscreen ? 'flex-1 flex flex-col' : ''}>
-                {/* Controls - Better Layout */}
-                {!isFullscreen && (
-                  <div className="mb-6">
-                    {/* Input Section */}
-                    <div className="mb-4">
-                      <textarea
-                        value={input}
-                        onChange={(e) => setInput(e.target.value)}
-                        placeholder="Continue evolving your mind map..."
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        rows={3}
-                        onKeyPress={(e) => e.key === 'Enter' && e.shiftKey === false && (e.preventDefault(), generateMindMap(true))}
-                      />
-                    </div>
-                    
-                    {/* Buttons Under Input */}
-                    <div className="flex flex-wrap gap-3 items-center justify-between mb-4">
-                      <div className="flex gap-3">
-                        <button
-                          onClick={() => generateMindMap(true)}
-                          disabled={!input.trim()}
-                          className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50"
-                        >
-                          Continue
-                        </button>
-                        <button
-                          onClick={startOver}
-                          className="bg-gray-600 text-white px-6 py-2 rounded-lg hover:bg-gray-700"
-                        >
-                          Start Over
-                        </button>
-                        <button
-                          onClick={() => setShowFileUpload(true)}
-                          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-                        >
-                          📁 Upload
-                        </button>
-                      </div>
-                      
-                      <div className="flex gap-3">
-                        <button
-                          onClick={() => {
-                            setIsFullscreen(true);
-                            setShowFullscreenInput(true);
-                          }}
-                          className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700"
-                        >
-                          Fullscreen
-                        </button>
-                        <button
-                          onClick={() => exportMindMap('json')}
-                          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-                        >
-                          Export JSON
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* AI Suggestions Under Buttons */}
-                    {suggestions.length > 0 && (
-                      <div className="p-4 bg-blue-50 rounded-lg">
-                        <h3 className="text-lg font-medium text-blue-900 mb-3">💡 AI Expansion Suggestions</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                          {suggestions.map((suggestion, index) => (
-                            <button
-                              key={index}
-                              onClick={() => setInput(suggestion)}
-                              className="text-left p-3 bg-white rounded border hover:bg-blue-50 hover:border-blue-300 transition-colors"
-                            >
-                              <span className="text-sm text-gray-700">{suggestion}</span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Mind Map Visualization */}
-                <div className={`bg-gray-50 rounded-lg overflow-hidden ${
-                  isFullscreen ? 'flex-1' : 'h-96 lg:h-[600px]'
-                }`}>
-                  <ReactFlow
-                    nodes={nodes}
-                    edges={edges}
-                    onNodesChange={handleNodesChange}
-                    onEdgesChange={onEdgesChange}
-                    fitView
-                    fitViewOptions={{ padding: 0.2 }}
-                    nodesDraggable={true}
-                    nodesConnectable={false}
-                    elementsSelectable={true}
-                  >
-                    <Controls />
-                    <MiniMap />
-                    <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
-                  </ReactFlow>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Problem 29: File Upload Modal */}
-        {showFileUpload && currentStep === 'complete' && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white p-6 rounded-lg max-w-md w-full mx-4">
-              <h3 className="text-lg font-semibold mb-4">Upload Previous Mind Map</h3>
-              <FileUploadSection 
-                onFileUpload={handleFileUpload}
-                isVisible={true}
-              />
-              <button
-                onClick={() => setShowFileUpload(false)}
-                className="mt-4 w-full bg-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-400"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    </>
-  );
 }
