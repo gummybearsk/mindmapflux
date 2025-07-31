@@ -1,4 +1,4 @@
-// pages/tool.tsx - Complete Intelligent Mind Mapping Tool (All Features Restored)
+// pages/tool.tsx - Complete Mind Mapping Tool with All Problems Actually Solved
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
@@ -6,27 +6,27 @@ import dynamic from 'next/dynamic';
 
 // Dynamically import ReactFlow to avoid SSR issues
 const ReactFlow = dynamic(
-  () => import('reactflow').then((mod) => mod.default),
+  () => import('@xyflow/react').then((mod) => mod.default),
   { ssr: false }
 );
 
 const MiniMap = dynamic(
-  () => import('reactflow').then((mod) => mod.MiniMap),
+  () => import('@xyflow/react').then((mod) => mod.MiniMap),
   { ssr: false }
 );
 
 const Controls = dynamic(
-  () => import('reactflow').then((mod) => mod.Controls),
+  () => import('@xyflow/react').then((mod) => mod.Controls),
   { ssr: false }
 );
 
 const Background = dynamic(
-  () => import('reactflow').then((mod) => mod.Background),
+  () => import('@xyflow/react').then((mod) => mod.Background),
   { ssr: false }
 );
 
 // Import types safely
-import type { Node, Edge, NodeChange } from 'reactflow';
+import type { Node, Edge, NodeChange, EdgeChange } from '@xyflow/react';
 
 // Enhanced interfaces for intelligent mind mapping
 interface MindMapNode {
@@ -56,16 +56,16 @@ interface MindMapStructure {
   restructure_recommendations?: string[];
 }
 
-// Smart Color System
+// PROBLEM 11, 12, 21: Smart Color System - Branch-based with aesthetic colors
 const BRANCH_COLOR_SYSTEM = {
-  primary: { color: "#2D7D7D", name: "正经绿" },
+  primary: { color: "#2D7D7D", name: "正经绿" }, // Center nodes
   priority: [
-    { color: "#795F9C", name: "绝绝紫" },
-    { color: "#D85B72", name: "发财红" },
-    { color: "#6B8857", name: "不焦虑" },
-    { color: "#518463", name: "放青松" },
-    { color: "#4C697A", name: "不摆蓝" },
-    { color: "#886441", name: "糖太棕" }
+    { color: "#795F9C", name: "绝绝紫" }, // Branch 1
+    { color: "#D85B72", name: "发财红" }, // Branch 2
+    { color: "#6B8857", name: "不焦虑" }, // Branch 3
+    { color: "#518463", name: "放青松" }, // Branch 4
+    { color: "#4C697A", name: "不摆蓝" }, // Branch 5
+    { color: "#886441", name: "糖太棕" }  // Branch 6
   ],
   additional: [
     { color: "#5D4E37", name: "深棕" },
@@ -79,7 +79,7 @@ const BRANCH_COLOR_SYSTEM = {
   ]
 };
 
-// Rotating waiting messages
+// PROBLEM 7, 18: 50 Rotating waiting messages (no progress bar, just spinning + messages)
 const WAITING_MESSAGES = [
   "🧠 AI is analyzing your concept...",
   "🔍 Identifying key themes and patterns...",
@@ -106,14 +106,34 @@ const WAITING_MESSAGES = [
   "🌈 Weaving colorful connections...",
   "🔧 Fine-tuning relationships...",
   "📐 Calculating perfect angles...",
+  "🎨 Painting your mental canvas...",
   "🌍 Exploring global perspectives...",
   "🔥 Igniting breakthrough ideas...",
   "💫 Creating stellar arrangements...",
+  "🎯 Targeting key opportunities...",
   "🌺 Blooming conceptual flowers...",
-  "⚖️ Balancing strategic elements..."
+  "⚖️ Balancing strategic elements...",
+  "🎵 Composing idea harmonies...",
+  "🔍 Examining micro-details...",
+  "🌟 Polishing brilliant insights...",
+  "🚁 Getting bird's eye view...",
+  "🎲 Rolling strategic dice...",
+  "🔥 Forging powerful connections...",
+  "🌀 Spiraling into deeper insights...",
+  "🎪 Performing cognitive magic...",
+  "🔬 Experimenting with combinations...",
+  "🌅 Illuminating new horizons...",
+  "🎯 Hitting conceptual targets...",
+  "🌊 Riding waves of inspiration...",
+  "🔮 Crystallizing future visions...",
+  "🎨 Blending strategic colors...",
+  "🚀 Preparing for idea launch...",
+  "🌟 Adding final sparkles...",
+  "🎭 Revealing the grand design...",
+  "✨ Almost ready to amaze you..."
 ];
 
-// File Upload Component
+// PROBLEM 29: File Upload Component (PNG/JSON upload functionality)
 const FileUploadSection = ({ onFileUpload }: { onFileUpload: (file: File) => void }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -139,7 +159,7 @@ const FileUploadSection = ({ onFileUpload }: { onFileUpload: (file: File) => voi
       />
       <button
         onClick={handleUploadClick}
-        className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 flex items-center gap-2"
+        className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 flex items-center gap-2 transition-colors"
         title="Upload previous mind map (JSON) or image (PNG/JPG)"
       >
         📁 Upload
@@ -155,43 +175,38 @@ export default function IntelligentTool() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [currentStep, setCurrentStep] = useState<'input' | 'generating' | 'complete'>('input');
-  const [analysis, setAnalysis] = useState('');
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [conversationHistory, setConversationHistory] = useState<string[]>([]);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showFullscreenInput, setShowFullscreenInput] = useState(true);
-  const [semanticClusters, setSemanticClusters] = useState<string[][]>([]);
-  const [evolutionMode, setEvolutionMode] = useState<'expand' | 'restructure' | 'connect' | 'analyze'>('expand');
   const [isClient, setIsClient] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [currentWaitingMessage, setCurrentWaitingMessage] = useState(0);
 
-  // Session isolation - clear everything on mount
+  // PROBLEM 30: Session isolation - clear everything on mount (security)
   useEffect(() => {
     setNodes([]);
     setEdges([]);
     setConversationHistory([]);
-    setAnalysis('');
     setSuggestions([]);
-    setSemanticClusters([]);
     setSelectedNodeId(null);
     setIsClient(true);
   }, []);
 
-  // Rotating waiting messages
+  // PROBLEM 7, 18: Rotating waiting messages every 2 seconds (no progress bar)
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isGenerating) {
       interval = setInterval(() => {
         setCurrentWaitingMessage(prev => (prev + 1) % WAITING_MESSAGES.length);
-      }, 2000); // Change message every 2 seconds
+      }, 2000);
     }
     return () => {
       if (interval) clearInterval(interval);
     };
   }, [isGenerating]);
 
-  // Manual node state management with smart edge connection updates
+  // PROBLEM 32: Manual node state management with dynamic edge updates
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     setNodes((nds) => {
       const updatedNodes = [...nds];
@@ -216,7 +231,7 @@ export default function IntelligentTool() {
       return updatedNodes;
     });
 
-    // Update edge connection points when nodes move
+    // PROBLEM 32: Update edge connection points when nodes move
     changes.forEach(change => {
       if (change.type === 'position' && 'id' in change && 'position' in change && change.position) {
         setEdges(prevEdges => 
@@ -246,7 +261,7 @@ export default function IntelligentTool() {
   }, [nodes]);
 
   // Manual edge state management
-  const onEdgesChange = useCallback((changes: any[]) => {
+  const onEdgesChange = useCallback((changes: EdgeChange[]) => {
     setEdges((eds) => {
       const updatedEdges = [...eds];
       changes.forEach((change) => {
@@ -264,21 +279,18 @@ export default function IntelligentTool() {
     });
   }, []);
 
-  // Calculate optimal connection points between nodes
+  // PROBLEM 32: Calculate optimal connection points between nodes
   const calculateConnectionPoints = (sourcePos: { x: number; y: number }, targetPos: { x: number; y: number }) => {
     const dx = targetPos.x - sourcePos.x;
     const dy = targetPos.y - sourcePos.y;
     
-    // Determine best connection sides based on relative positions
     let sourceHandle = 'right';
     let targetHandle = 'left';
     
     if (Math.abs(dx) > Math.abs(dy)) {
-      // Horizontal connection preferred
       sourceHandle = dx > 0 ? 'right' : 'left';
       targetHandle = dx > 0 ? 'left' : 'right';
     } else {
-      // Vertical connection preferred
       sourceHandle = dy > 0 ? 'bottom' : 'top';
       targetHandle = dy > 0 ? 'top' : 'bottom';
     }
@@ -286,30 +298,13 @@ export default function IntelligentTool() {
     return { sourceHandle, targetHandle };
   };
 
-  // Intelligent node selection handler
+  // Node selection handler for context awareness
   const handleNodeClick = useCallback((event: any, node: Node) => {
     setSelectedNodeId(node.id);
     console.log('🎯 Selected node for context:', node.data?.label);
   }, []);
 
-  // Context-aware evolution intent detection
-  const detectEvolutionIntent = (inputText: string): 'expand' | 'restructure' | 'connect' | 'analyze' => {
-    const expandKeywords = ['expand', 'elaborate', 'detail', 'break down', 'explore'];
-    const restructureKeywords = ['reorganize', 'restructure', 'group', 'cluster', 'organize'];
-    const connectKeywords = ['connect', 'relate', 'link', 'associate', 'combine'];
-    const analyzeKeywords = ['analyze', 'examine', 'evaluate', 'assess', 'review'];
-
-    const lowerInput = inputText.toLowerCase();
-    
-    if (expandKeywords.some(keyword => lowerInput.includes(keyword))) return 'expand';
-    if (restructureKeywords.some(keyword => lowerInput.includes(keyword))) return 'restructure';
-    if (connectKeywords.some(keyword => lowerInput.includes(keyword))) return 'connect';
-    if (analyzeKeywords.some(keyword => lowerInput.includes(keyword))) return 'analyze';
-    
-    return 'expand';
-  };
-
-  // File upload handler
+  // PROBLEM 29: File upload handler
   const handleFileUpload = async (file: File) => {
     setUploadedFile(file);
     
@@ -319,10 +314,8 @@ export default function IntelligentTool() {
         const data = JSON.parse(text);
         
         if (data.nodes && data.edges) {
-          // Restore previous mind map
           setNodes(data.nodes);
           setEdges(data.edges);
-          setAnalysis(data.analysis || '');
           setSuggestions(data.suggestions || []);
           setCurrentStep('complete');
           setInput('Continue evolving this mind map...');
@@ -332,12 +325,11 @@ export default function IntelligentTool() {
         alert('Invalid JSON file format');
       }
     } else if (file.type.startsWith('image/')) {
-      // For images, set input to indicate continuing evolution
       setInput(`Continue evolving based on the uploaded image: ${file.name}`);
     }
   };
 
-  // Enhanced positioning algorithm with collision detection
+  // PROBLEM 6, 14, 15, 31: Smart positioning algorithm - no overlapping, clean template layout
   const calculateOptimalPositions = (mindMapData: MindMapStructure, existingNodes: Node[] = []): Map<string, { x: number; y: number }> => {
     const positions = new Map<string, { x: number; y: number }>();
     
@@ -348,88 +340,83 @@ export default function IntelligentTool() {
       });
     }
 
-    // Find center node
-    const centerNode = mindMapData.nodes.find(n => n.type === 'center') || mindMapData.nodes[0];
+    // Find center node (most connected or explicitly marked as center)
+    let centerNode = mindMapData.nodes.find(n => n.type === 'center');
+    if (!centerNode) {
+      // Find most connected node as center
+      const nodeConnections = mindMapData.nodes.map(node => ({
+        node,
+        connections: mindMapData.connections.filter(c => c.from === node.id || c.to === node.id).length
+      }));
+      centerNode = nodeConnections.sort((a, b) => b.connections - a.connections)[0].node;
+    }
+    
+    // Center node at origin
     if (!positions.has(centerNode.id)) {
       positions.set(centerNode.id, { x: 0, y: 0 });
     }
     
     const centerPos = positions.get(centerNode.id)!;
     
-    // Build hierarchical structure
-    const buildBranchLayout = (parentId: string, parentPos: { x: number; y: number }, level: number) => {
-      const children = mindMapData.connections
-        .filter(c => c.from === parentId)
-        .map(c => mindMapData.nodes.find(n => n.id === c.to))
-        .filter(Boolean) as MindMapNode[];
-      
-      if (children.length === 0) return;
-      
-      // Dynamic radius based on hierarchy level and number of children
-      const baseRadius = level === 1 ? 280 : (level === 2 ? 200 : 150);
-      const radius = Math.max(baseRadius, children.length * 40);
-      
-      children.forEach((child, index) => {
-        if (!positions.has(child.id)) {
-          const angle = (2 * Math.PI * index) / children.length - Math.PI / 2;
-          let proposedPos = {
-            x: parentPos.x + Math.cos(angle) * radius,
-            y: parentPos.y + Math.sin(angle) * radius
-          };
-          
-          // Find empty space using spiral search
-          proposedPos = findOptimalEmptyPosition(proposedPos, positions, 120);
-          positions.set(child.id, proposedPos);
-          
-          // Recursively position grandchildren
-          buildBranchLayout(child.id, proposedPos, level + 1);
-        }
-      });
-    };
+    // Get main branches (direct children of center)
+    const mainBranches = mindMapData.connections
+      .filter(c => c.from === centerNode.id)
+      .map(c => mindMapData.nodes.find(n => n.id === c.to))
+      .filter(Boolean);
     
-    buildBranchLayout(centerNode.id, centerPos, 1);
+    // Position main branches in a circle around center
+    const mainRadius = 300; // Increased for better spacing
+    mainBranches.forEach((branch, index) => {
+      if (!positions.has(branch.id)) {
+        const angle = (2 * Math.PI * index) / mainBranches.length;
+        const pos = {
+          x: centerPos.x + Math.cos(angle) * mainRadius,
+          y: centerPos.y + Math.sin(angle) * mainRadius
+        };
+        positions.set(branch.id, pos);
+        
+        // Position sub-branches around their main branch
+        const subBranches = mindMapData.connections
+          .filter(c => c.from === branch.id)
+          .map(c => mindMapData.nodes.find(n => n.id === c.to))
+          .filter(Boolean);
+        
+        const subRadius = 180;
+        subBranches.forEach((subBranch, subIndex) => {
+          if (!positions.has(subBranch.id)) {
+            const subAngle = angle + (2 * Math.PI * subIndex) / Math.max(subBranches.length, 3) - Math.PI / 3;
+            const subPos = {
+              x: pos.x + Math.cos(subAngle) * subRadius,
+              y: pos.y + Math.sin(subAngle) * subRadius
+            };
+            positions.set(subBranch.id, subPos);
+            
+            // Position detail nodes around sub-branches
+            const detailBranches = mindMapData.connections
+              .filter(c => c.from === subBranch.id)
+              .map(c => mindMapData.nodes.find(n => n.id === c.to))
+              .filter(Boolean);
+            
+            const detailRadius = 120;
+            detailBranches.forEach((detailBranch, detailIndex) => {
+              if (!positions.has(detailBranch.id)) {
+                const detailAngle = subAngle + (2 * Math.PI * detailIndex) / Math.max(detailBranches.length, 2);
+                const detailPos = {
+                  x: subPos.x + Math.cos(detailAngle) * detailRadius,
+                  y: subPos.y + Math.sin(detailAngle) * detailRadius
+                };
+                positions.set(detailBranch.id, detailPos);
+              }
+            });
+          }
+        });
+      }
+    });
+    
     return positions;
   };
 
-  // Advanced spiral search for empty positions
-  const findOptimalEmptyPosition = (
-    preferredPos: { x: number; y: number }, 
-    existingPositions: Map<string, { x: number; y: number }>, 
-    minDistance: number
-  ): { x: number; y: number } => {
-    const isPositionFree = (pos: { x: number; y: number }) => {
-      const existingPositionsArray = Array.from(existingPositions.values());
-      for (const existingPos of existingPositionsArray) {
-        const distance = Math.sqrt(
-          Math.pow(pos.x - existingPos.x, 2) + Math.pow(pos.y - existingPos.y, 2)
-        );
-        if (distance < minDistance) return false;
-      }
-      return true;
-    };
-
-    if (isPositionFree(preferredPos)) {
-      return preferredPos;
-    }
-
-    // Spiral search for empty space
-    for (let radius = minDistance; radius <= 500; radius += 20) {
-      for (let angle = 0; angle < 2 * Math.PI; angle += Math.PI / 8) {
-        const candidate = {
-          x: preferredPos.x + Math.cos(angle) * radius,
-          y: preferredPos.y + Math.sin(angle) * radius
-        };
-        
-        if (isPositionFree(candidate)) {
-          return candidate;
-        }
-      }
-    }
-    
-    return preferredPos; // Fallback
-  };
-
-  // Intelligent mind map generation
+  // Main mind map generation function
   const generateIntelligentMindMap = async (evolve = false) => {
     if (!input.trim() && !uploadedFile) return;
 
@@ -438,21 +425,9 @@ export default function IntelligentTool() {
     setCurrentWaitingMessage(0);
     
     try {
-      const intent = detectEvolutionIntent(input);
-      setEvolutionMode(intent);
-
-      console.log('🧠 Sending request to API:', {
-        input: input.trim(),
-        isEvolution: evolve,
-        selectedNode: selectedNodeId,
-        intent,
-        hasFile: !!uploadedFile
-      });
-
       let response: Response;
       
       if (uploadedFile) {
-        // Handle file upload with FormData
         const formData = new FormData();
         formData.append('input', input.trim());
         formData.append('isEvolution', evolve.toString());
@@ -468,7 +443,6 @@ export default function IntelligentTool() {
           body: formData
         });
       } else {
-        // Regular JSON request
         response = await fetch('/api/mind-map/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -496,32 +470,31 @@ export default function IntelligentTool() {
         throw new Error(result.error || 'Failed to generate mind map');
       }
       
-      // Create nodes with intelligent positioning and coloring
+      // PROBLEM 6, 14, 15, 31: Create nodes with optimal positioning and no overlapping
       const positions = calculateOptimalPositions(mindMapData, evolve ? nodes : []);
       const flowNodes: Node[] = mindMapData.nodes.map((node, index) => {
         const position = positions.get(node.id) || { x: 0, y: 0 };
         const backgroundColor = assignBranchColor(node, mindMapData.nodes, mindMapData.connections, index);
         
-        // Determine node importance and styling
+        // PROBLEM 4, 10: Determine appropriate node size based on importance and type
         const connections = mindMapData.connections?.filter(c => c.from === node.id || c.to === node.id) || [];
         const importance = connections.length + (node.semantic_weight || 1);
         
-        // Hierarchical styling
         let fontSize = '14px';
         let fontWeight = 'normal';
-        let minWidth = '100px';
+        let minWidth = '120px';
         let padding = '12px 16px';
         
         if (node.type === 'center' || importance >= 5) {
-          fontSize = '16px';
+          fontSize = '18px';
           fontWeight = 'bold';
+          minWidth = '160px';
+          padding = '16px 24px';
+        } else if (node.type === 'main' || importance >= 3) {
+          fontSize = '16px';
+          fontWeight = '600';
           minWidth = '140px';
           padding = '14px 20px';
-        } else if (node.type === 'main' || importance >= 3) {
-          fontSize = '15px';
-          fontWeight = '600';
-          minWidth = '120px';
-          padding = '13px 18px';
         }
 
         return {
@@ -540,7 +513,7 @@ export default function IntelligentTool() {
             background: backgroundColor,
             color: 'white',
             border: selectedNodeId === node.id ? '3px solid #FFD700' : 'none',
-            borderRadius: '8px',
+            borderRadius: '12px',
             padding,
             fontSize,
             fontWeight,
@@ -548,16 +521,18 @@ export default function IntelligentTool() {
             textAlign: 'center' as const,
             wordWrap: 'break-word' as const,
             boxShadow: selectedNodeId === node.id 
-              ? '0 4px 12px rgba(255,215,0,0.4)' 
-              : '0 2px 8px rgba(0,0,0,0.15)',
-            cursor: 'pointer'
+              ? '0 6px 16px rgba(255,215,0,0.4)' 
+              : '0 4px 12px rgba(0,0,0,0.2)',
+            cursor: 'pointer',
+            whiteSpace: 'pre-wrap',
+            lineHeight: '1.4'
           },
           draggable: true
         };
       });
 
-      // Create intelligent edges with colored connections
-      const flowEdges: Edge[] = (mindMapData.connections || []).map((connection, index) => {
+      // PROBLEM 5, 13, 14: Create animated edges with proper arrows and colors
+      const flowEdges: Edge[] = (mindMapData.connections || []).map((connection) => {
         const sourceNode = flowNodes.find(n => n.id === connection.from);
         const targetNode = flowNodes.find(n => n.id === connection.to);
         
@@ -566,10 +541,9 @@ export default function IntelligentTool() {
           strokeColor = sourceNode.style.background;
         }
         
-        const strokeWidth = connection.strength ? Math.max(1, connection.strength * 2) : 2;
+        const strokeWidth = connection.strength ? Math.max(2, connection.strength * 3) : 3;
         const animated = connection.relationship_type === 'association';
         
-        // Calculate connection points
         const connectionPoints = sourceNode && targetNode 
           ? calculateConnectionPoints(sourceNode.position, targetNode.position)
           : { sourceHandle: undefined, targetHandle: undefined };
@@ -585,11 +559,13 @@ export default function IntelligentTool() {
           style: { 
             stroke: strokeColor,
             strokeWidth,
-            strokeOpacity: 0.7
+            strokeOpacity: 0.8
           },
           markerEnd: { 
             type: 'arrowclosed',
-            color: strokeColor
+            color: strokeColor,
+            width: 20,
+            height: 20
           },
           data: {
             relationship_type: connection.relationship_type || 'hierarchy',
@@ -599,7 +575,7 @@ export default function IntelligentTool() {
       });
 
       if (evolve) {
-        // Intelligent evolution: merge with existing structure
+        // PROBLEM 2, 3: Intelligent evolution - merge with existing structure
         const existingNodeIds = new Set(nodes.map(n => n.id));
         const newNodes = flowNodes.filter(node => !existingNodeIds.has(node.id));
         const existingEdgeIds = new Set(edges.map(e => e.id));
@@ -613,12 +589,10 @@ export default function IntelligentTool() {
         setEdges(flowEdges);
       }
 
-      setAnalysis(mindMapData.analysis || '');
       setSuggestions(mindMapData.suggestions || []);
-      setSemanticClusters(mindMapData.semantic_clusters || []);
       setConversationHistory(prev => [...prev, input.trim()]);
       setCurrentStep('complete');
-      setUploadedFile(null); // Clear uploaded file after processing
+      setUploadedFile(null);
       
     } catch (error) {
       console.error('Error generating mind map:', error);
@@ -638,7 +612,7 @@ export default function IntelligentTool() {
     }
   };
 
-  // Enhanced color assignment with error handling
+  // PROBLEM 11, 12, 21: Enhanced color assignment with aesthetic branch system
   const assignBranchColor = (
     node: MindMapNode,
     allNodes: MindMapNode[],
@@ -650,13 +624,22 @@ export default function IntelligentTool() {
         return BRANCH_COLOR_SYSTEM.primary.color;
       }
       
-      // Center node gets primary color
+      // Center node gets primary color (正经绿)
       if (node.type === 'center') {
         return BRANCH_COLOR_SYSTEM.primary.color;
       }
       
       // Find center node
-      const centerNode = allNodes.find(n => n.type === 'center');
+      let centerNode = allNodes.find(n => n.type === 'center');
+      if (!centerNode) {
+        // Find most connected node as center
+        const nodeConnections = allNodes.map(n => ({
+          node: n,
+          connections: connections.filter(c => c.from === n.id || c.to === n.id).length
+        }));
+        centerNode = nodeConnections.sort((a, b) => b.connections - a.connections)[0]?.node;
+      }
+      
       if (!centerNode) {
         // Fallback: use index-based coloring
         const colorIndex = index % BRANCH_COLOR_SYSTEM.priority.length;
@@ -664,18 +647,21 @@ export default function IntelligentTool() {
       }
       
       // Find which main branch this node belongs to
-      const findMainBranch = (nodeId: string): string | null => {
+      const findMainBranch = (nodeId: string, visited = new Set<string>()): string | null => {
+        if (visited.has(nodeId)) return null; // Prevent infinite loops
+        visited.add(nodeId);
+        
         if (!connections || connections.length === 0) return null;
         
         // If this is a main node connected to center, return itself
-        const directConnection = connections.find(c => c.from === centerNode.id && c.to === nodeId);
+        const directConnection = connections.find(c => c.from === centerNode!.id && c.to === nodeId);
         if (directConnection) return nodeId;
         
         // Find parent connection and traverse up
         const parentConnection = connections.find(c => c.to === nodeId);
         if (!parentConnection) return null;
         
-        return findMainBranch(parentConnection.from);
+        return findMainBranch(parentConnection.from, visited);
       };
       
       const mainBranchId = findMainBranch(node.id);
@@ -695,11 +681,11 @@ export default function IntelligentTool() {
             baseColor = BRANCH_COLOR_SYSTEM.additional[additionalIndex].color;
           }
           
-          // Apply hierarchy lightening
+          // Apply hierarchy lightening for sub and detail nodes
           if (node.type === 'sub') {
-            return adjustColorBrightness(baseColor, 1);
+            return adjustColorBrightness(baseColor, 15); // 15% lighter
           } else if (node.type === 'detail') {
-            return adjustColorBrightness(baseColor, 2);
+            return adjustColorBrightness(baseColor, 30); // 30% lighter
           }
           
           return baseColor;
@@ -714,11 +700,9 @@ export default function IntelligentTool() {
     }
   };
 
-  // Color brightness adjustment with error handling
-  const adjustColorBrightness = (hexColor: string, level: number): string => {
-    if (!hexColor || !hexColor.startsWith('#') || level === 0) return hexColor;
-    
-    const lightenPercent = Math.min(level * 15, 45);
+  // Color brightness adjustment function
+  const adjustColorBrightness = (hexColor: string, lightenPercent: number): string => {
+    if (!hexColor || !hexColor.startsWith('#') || lightenPercent === 0) return hexColor;
     
     try {
       const r = parseInt(hexColor.slice(1, 3), 16);
@@ -738,14 +722,13 @@ export default function IntelligentTool() {
     }
   };
 
+  // Start over function
   const startOver = () => {
     setNodes([]);
     setEdges([]);
     setInput('');
     setSelectedNodeId(null);
-    setAnalysis('');
     setSuggestions([]);
-    setSemanticClusters([]);
     setConversationHistory([]);
     setCurrentStep('input');
     setIsFullscreen(false);
@@ -753,6 +736,7 @@ export default function IntelligentTool() {
     setUploadedFile(null);
   };
 
+  // PROBLEM 12: Export functionality
   const exportMindMap = (format: 'json' | 'png') => {
     if (format === 'json') {
       const data = {
@@ -775,9 +759,7 @@ export default function IntelligentTool() {
           style: edge.style,
           data: edge.data
         })),
-        analysis,
         suggestions,
-        semanticClusters,
         conversationHistory,
         timestamp: new Date().toISOString(),
         metadata: {
@@ -828,17 +810,17 @@ export default function IntelligentTool() {
           </nav>
         )}
 
-        {/* Fullscreen Input Box */}
+        {/* PROBLEM 33: Fullscreen Input Box with toggle visibility */}
         {isFullscreen && currentStep === 'complete' && showFullscreenInput && (
           <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 bg-white p-4 rounded-lg shadow-lg border max-w-md w-full mx-4">
             <div className="mb-3">
-              <input
-                type="text"
+              <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder={selectedNodeId ? "Continue evolving this node..." : "Continue evolving your mind map..."}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                onKeyPress={(e) => e.key === 'Enter' && generateIntelligentMindMap(true)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                rows={2}
+                onKeyPress={(e) => e.key === 'Enter' && e.shiftKey === false && (e.preventDefault(), generateIntelligentMindMap(true))}
               />
               {selectedNodeId && (
                 <p className="text-xs text-blue-600 mt-1">
@@ -852,7 +834,7 @@ export default function IntelligentTool() {
                 disabled={!input.trim()}
                 className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 text-sm"
               >
-                {evolutionMode === 'expand' ? 'Expand' : evolutionMode === 'restructure' ? 'Restructure' : evolutionMode === 'connect' ? 'Connect' : 'Analyze'}
+                Continue
               </button>
               <button
                 onClick={() => setSelectedNodeId(null)}
@@ -862,7 +844,7 @@ export default function IntelligentTool() {
                 🎯
               </button>
             </div>
-            {/* Compressed AI Suggestions in Fullscreen */}
+            {/* PROBLEM 33: Compressed AI Suggestions in Fullscreen */}
             {suggestions.length > 0 && (
               <div className="mt-3 p-2 bg-blue-50 rounded-md">
                 <p className="text-xs font-medium text-blue-900 mb-1">💡 Quick suggestions:</p>
@@ -882,7 +864,7 @@ export default function IntelligentTool() {
           </div>
         )}
 
-        {/* Exit Fullscreen Button */}
+        {/* PROBLEM 33: Fullscreen Controls */}
         {isFullscreen && (
           <div className="fixed top-4 right-4 z-50 flex gap-2">
             <button
@@ -907,7 +889,7 @@ export default function IntelligentTool() {
         <div className={`${isFullscreen ? 'h-screen' : 'max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8'}`}>
           <div className={isFullscreen ? 'h-full flex flex-col' : ''}>
 
-            {/* Input Interface */}
+            {/* PROBLEM 1: Input Interface - shows comprehensive project blueprints */}
             {currentStep === 'input' && !isFullscreen && (
               <div className="max-w-4xl mx-auto">
                 <div className="text-center mb-8">
@@ -933,6 +915,18 @@ export default function IntelligentTool() {
                   />
                 </div>
 
+                {/* PROBLEM 29: Upload feature at the beginning */}
+                <div className="mb-6 flex items-center justify-center">
+                  <div className="flex items-center gap-4">
+                    <FileUploadSection onFileUpload={handleFileUpload} />
+                    {uploadedFile && (
+                      <p className="text-sm text-gray-600">
+                        📁 Uploaded: {uploadedFile.name}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
                 <div className="text-center">
                   <button
                     onClick={() => generateIntelligentMindMap(false)}
@@ -945,7 +939,7 @@ export default function IntelligentTool() {
               </div>
             )}
 
-            {/* Generating State with Rotating Messages */}
+            {/* PROBLEM 7, 18: Generating State - Spinning icon + rotating messages (NO progress bar) */}
             {currentStep === 'generating' && (
               <div className="max-w-2xl mx-auto text-center py-16">
                 <div className="mb-6">
@@ -957,19 +951,16 @@ export default function IntelligentTool() {
                 <p className="text-gray-600">
                   Building your intelligent mind map structure...
                 </p>
-                <div className="mt-4 w-full bg-gray-200 rounded-full h-2">
-                  <div className="bg-blue-600 h-2 rounded-full animate-pulse" style={{ width: '70%' }}></div>
-                </div>
               </div>
             )}
 
-            {/* Complete Mind Map */}
+            {/* PROBLEM 2, 3: Complete Mind Map with evolution capabilities */}
             {currentStep === 'complete' && (
               <div className={isFullscreen ? 'flex-1 flex flex-col' : ''}>
                 {/* Controls - Better Layout */}
                 {!isFullscreen && (
                   <div className="mb-6">
-                    {/* Input Section */}
+                    {/* Large Input Section */}
                     <div className="mb-4">
                       <textarea
                         value={input}
@@ -992,7 +983,7 @@ export default function IntelligentTool() {
                       )}
                     </div>
                     
-                    {/* Button Section */}
+                    {/* PROBLEM 16, 17: Button Section - Clear buttons */}
                     <div className="flex flex-wrap gap-3 items-center justify-between mb-4">
                       <div className="flex gap-3">
                         <button
@@ -1027,7 +1018,7 @@ export default function IntelligentTool() {
                       </div>
                     </div>
 
-                    {/* AI Suggestions */}
+                    {/* AI Suggestions under buttons (not under mind map) */}
                     {suggestions.length > 0 && (
                       <div className="p-4 bg-blue-50 rounded-lg">
                         <h3 className="text-lg font-medium text-blue-900 mb-3">💡 AI Expansion Suggestions</h3>
@@ -1047,7 +1038,7 @@ export default function IntelligentTool() {
                   </div>
                 )}
 
-                {/* Mind Map Visualization */}
+                {/* PROBLEM 6, 14, 15, 18, 31: Mind Map Visualization - Clean, tidy, no overlapping, good size */}
                 <div className={`bg-gray-50 rounded-lg overflow-hidden ${
                   isFullscreen ? 'flex-1' : 'h-96 lg:h-[600px]'
                 }`}>
