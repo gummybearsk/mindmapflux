@@ -28,25 +28,6 @@ const Background = dynamic(
 // Import types and enums safely
 import type { Node, Edge, NodeChange } from 'reactflow';
 
-// Define enums locally to avoid SSR issues
-const MarkerType = {
-  Arrow: 'arrowclosed' as const,
-  ArrowClosed: 'arrowclosed' as const
-};
-
-const Position = {
-  Top: 'top' as const,
-  Right: 'right' as const,
-  Bottom: 'bottom' as const,
-  Left: 'left' as const
-};
-
-const BackgroundVariant = {
-  Lines: 'lines' as const,
-  Dots: 'dots' as const,
-  Cross: 'cross' as const
-};
-
 // Enhanced interfaces for intelligent mind mapping
 interface MindMapNode {
   id: string;
@@ -354,7 +335,7 @@ export default function IntelligentTool() {
             strokeOpacity: 0.7
           },
           markerEnd: { 
-            type: MarkerType.Arrow,
+            type: 'arrowclosed',
             color: strokeColor
           },
           data: {
@@ -636,7 +617,10 @@ export default function IntelligentTool() {
               {showFullscreenInput ? '▼' : '▲'}
             </button>
             <button
-              onClick={() => setIsFullscreen(false)}
+              onClick={() => {
+                setIsFullscreen(false);
+                setShowFullscreenInput(true);
+              }}
               className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 shadow-lg"
             >
               Exit Fullscreen
@@ -794,7 +778,7 @@ export default function IntelligentTool() {
                     >
                       <Controls />
                       <MiniMap />
-                      <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
+                      <Background variant="dots" gap={12} size={1} />
                     </ReactFlow>
                   ) : (
                     <div className="w-full h-full flex items-center justify-center bg-gray-100">
