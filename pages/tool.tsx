@@ -254,96 +254,94 @@ const assignBranchColor = (
     return BRANCH_COLOR_SYSTEM.primary.color;
   }
   
-  // Debug logging to understand the structure
-  console.log('Assigning color for node:', node.id, node.label, node.type);
-  
-  // Find all root nodes (nodes with no incoming connections)
+  // Simple approach: Find the true center node
   const rootNodes = allNodes.filter(n => !connections.some(c => c.to === n.id));
-  console.log('Root nodes found:', rootNodes.map(n => ({ id: n.id, label: n.label })));
+  console.log('All nodes:', allNodes.map(n => ({ id: n.id, label: n.label, type: n.type })));
+  console.log('All connections:', connections);
+  console.log('Root nodes (no incoming connections):', rootNodes.map(n => ({ id: n.id, label: n.label })));
   
-  // If this is a root node, assign branch colors
-  if (rootNodes.some(root => root.id === node.id)) {
-    const rootIndex = rootNodes.findIndex(root => root.id === node.id);
-    console.log('Root node index:', rootIndex);
-    
-    if (rootIndex === 0) {
-      // First root gets primary color (center)
+  const isRootNode = rootNodes.some(root => root.id === node.id);
+  console.log('Is', node.label, 'a root node?', isRootNode);
+  
+  if (isRootNode) {
+    // This is a root/center node
+    if (rootNodes.length === 1) {
+      // Only one root - this is the center
+      console.log('Single root node, using primary color for:', node.label);
       return BRANCH_COLOR_SYSTEM.primary.color;
     } else {
-      // Other roots get branch colors
-      const branchIndex = rootIndex - 1;
-      if (branchIndex < BRANCH_COLOR_SYSTEM.priority.length) {
-        const color = BRANCH_COLOR_SYSTEM.priority[branchIndex].color;
-        console.log('Assigned priority color:', color, BRANCH_COLOR_SYSTEM.priority[branchIndex].name);
+      // Multiple roots - assign different colors to each
+      const rootIndex = rootNodes.findIndex(root => root.id === node.id);
+      console.log('Multiple roots, root index:', rootIndex, 'for:', node.label);
+      
+      if (rootIndex < BRANCH_COLOR_SYSTEM.priority.length) {
+        const color = BRANCH_COLOR_SYSTEM.priority[rootIndex].color;
+        console.log('Assigned priority color:', color, BRANCH_COLOR_SYSTEM.priority[rootIndex].name);
         return color;
       } else {
-        const additionalIndex = (branchIndex - BRANCH_COLOR_SYSTEM.priority.length) % BRANCH_COLOR_SYSTEM.additional.length;
+        const additionalIndex = (rootIndex - BRANCH_COLOR_SYSTEM.priority.length) % BRANCH_COLOR_SYSTEM.additional.length;
         const color = BRANCH_COLOR_SYSTEM.additional[additionalIndex].color;
-        console.log('Assigned additional color:', color, BRANCH_COLOR_SYSTEM.additional[additionalIndex].name);
+        console.log('Assigned additional color:', color);
         return color;
       }
     }
-  }
-  
-  // For non-root nodes, find their root parent and inherit color family
-  const findRootParent = (nodeId: string, visited = new Set<string>()): string | null => {
-    if (visited.has(nodeId)) return null;
-    visited.add(nodeId);
-    
-    const parentConnection = connections.find(c => c.to === nodeId);
-    if (!parentConnection) return nodeId; // This is a root
-    
-    const parentNode = allNodes.find(n => n.id === parentConnection.from);
-    if (!parentNode) return nodeId;
-    
-    // If parent is a root, return it
-    if (rootNodes.some(root => root.id === parentNode.id)) {
-      return parentNode.id;
-    }
-    
-    // Otherwise, keep looking up
-    return findRootParent(parentNode.id, visited);
-  };
-  
-  const rootParentId = findRootParent(node.id);
-  console.log('Found root parent for', node.label, ':', rootParentId);
-  
-  if (rootParentId) {
-    const rootParent = allNodes.find(n => n.id === rootParentId);
-    if (rootParent) {
-      // Get the base color from the root parent
-      const rootIndex = rootNodes.findIndex(root => root.id === rootParentId);
-      let baseColor: string;
+  } else {
+    // This is a child node - find its root parent
+    const findRootParent = (nodeId: string): string | null => {
+      const parentConnection = connections.find(c => c.to === nodeId);
+      if (!parentConnection) return null;
       
-      if (rootIndex === 0) {
-        baseColor = BRANCH_COLOR_SYSTEM.primary.color;
-      } else {
-        const branchIndex = rootIndex - 1;
-        if (branchIndex < BRANCH_COLOR_SYSTEM.priority.length) {
-          baseColor = BRANCH_COLOR_SYSTEM.priority[branchIndex].color;
+      const parentNode = allNodes.find(n => n.id === parentConnection.from);
+      if (!parentNode) return null;
+      
+      // Check if parent is a root
+      if (rootNodes.some(root => root.id === parentNode.id)) {
+        return parentNode.id;
+      }
+      
+      // Otherwise, keep looking up
+      return findRootParent(parentNode.id);
+    };
+    
+    const rootParentId = findRootParent(node.id);
+    console.log('Finding root parent for', node.label, '- found:', rootParentId);
+    
+    if (rootParentId) {
+      // Get the root parent's color and apply hierarchy lightening
+      const rootParent = allNodes.find(n => n.id === rootParentId);
+      if (rootParent) {
+        const rootIndex = rootNodes.findIndex(root => root.id === rootParentId);
+        let baseColor: string;
+        
+        if (rootNodes.length === 1) {
+          baseColor = BRANCH_COLOR_SYSTEM.primary.color;
+        } else if (rootIndex < BRANCH_COLOR_SYSTEM.priority.length) {
+          baseColor = BRANCH_COLOR_SYSTEM.priority[rootIndex].color;
         } else {
-          const additionalIndex = (branchIndex - BRANCH_COLOR_SYSTEM.priority.length) % BRANCH_COLOR_SYSTEM.additional.length;
+          const additionalIndex = (rootIndex - BRANCH_COLOR_SYSTEM.priority.length) % BRANCH_COLOR_SYSTEM.additional.length;
           baseColor = BRANCH_COLOR_SYSTEM.additional[additionalIndex].color;
         }
+        
+        // Calculate depth from root
+        const getDepthFromRoot = (nodeId: string, rootId: string): number => {
+          if (nodeId === rootId) return 0;
+          const connection = connections.find(c => c.to === nodeId);
+          if (!connection) return 0;
+          return 1 + getDepthFromRoot(connection.from, rootId);
+        };
+        
+        const depth = getDepthFromRoot(node.id, rootParentId);
+        console.log('Node', node.label, 'depth from root:', depth, 'base color:', baseColor);
+        
+        return adjustColorBrightness(baseColor, depth);
       }
-      
-      // Apply hierarchy lightening based on depth
-      const getNodeDepth = (nodeId: string): number => {
-        const connection = connections.find(c => c.to === nodeId);
-        if (!connection) return 0;
-        return 1 + getNodeDepth(connection.from);
-      };
-      
-      const depth = getNodeDepth(node.id);
-      console.log('Node depth:', depth, 'Base color:', baseColor);
-      
-      return adjustColorBrightness(baseColor, depth);
     }
   }
   
-  // Fallback
-  console.log('Using fallback color for:', node.label);
-  return BRANCH_COLOR_SYSTEM.priority[0].color;
+  // Ultimate fallback - use index-based coloring
+  console.log('Using index-based fallback for:', node.label, 'index:', index);
+  const colorIndex = index % BRANCH_COLOR_SYSTEM.priority.length;
+  return BRANCH_COLOR_SYSTEM.priority[colorIndex].color;
 };
 
 // Adjust color brightness for hierarchy with reset mechanism
