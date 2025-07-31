@@ -528,16 +528,31 @@ export default function Tool() {
       }
       
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorText = await response.text();
+        console.error('API Error Response:', response.status, errorText);
+        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
       }
       
-      const result: ApiResponse = await response.json();
+      const result = await response.json();
+      console.log('API Response:', result); // Debug logging
       
-      if (!result.success || !result.data) {
-        throw new Error(result.error || 'Failed to generate mind map');
+      // Handle different possible response formats from backend
+      let mindMapData: MindMapData;
+      
+      if (result.success && result.data) {
+        // Format 1: { success: true, data: MindMapData }
+        mindMapData = result.data;
+      } else if (result.nodes && result.connections) {
+        // Format 2: Direct MindMapData object
+        mindMapData = result as MindMapData;
+      } else if (result.mindMap) {
+        // Format 3: { mindMap: MindMapData }
+        mindMapData = result.mindMap;
+      } else {
+        // Error case
+        console.error('API returned error or unexpected format:', result);
+        throw new Error(result.error || result.message || 'Failed to generate mind map');
       }
-
-      const mindMapData = result.data;
       
       // Calculate optimal positions with overlap prevention
       const positions = calculateOptimalPositions(mindMapData, evolve ? nodes : []);
@@ -631,7 +646,22 @@ export default function Tool() {
       
     } catch (error) {
       console.error('Error generating mind map:', error);
-      alert('Failed to generate mind map. Please try again.');
+      
+      // More user-friendly error messages
+      let errorMessage = 'Failed to generate mind map. ';
+      if (error instanceof Error) {
+        if (error.message.includes('HTTP error')) {
+          errorMessage += 'Server error occurred. Please check your backend API.';
+        } else if (error.message.includes('fetch')) {
+          errorMessage += 'Network error. Please check your connection.';
+        } else {
+          errorMessage += error.message;
+        }
+      } else {
+        errorMessage += 'Unknown error occurred.';
+      }
+      
+      alert(errorMessage);
     } finally {
       setIsGenerating(false);
       setUploadedFile(null);
