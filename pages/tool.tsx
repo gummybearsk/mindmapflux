@@ -32,7 +32,7 @@ import type { Node, Edge, NodeChange } from 'reactflow';
 interface MindMapNode {
   id: string;
   label: string;
-  type: 'main' | 'sub' | 'detail';
+  type: 'center' | 'main' | 'sub' | 'detail';
   level?: number;
   parentId?: string;
   semantic_weight?: number;
@@ -51,23 +51,9 @@ interface MindMapStructure {
   connections: MindMapConnection[];
   analysis: string;
   suggestions: string[];
-  context: string;
+  context?: string;
   semantic_clusters?: string[][];
   restructure_recommendations?: string[];
-}
-
-interface IntelligentRequest {
-  input: string;
-  isEvolution: boolean;
-  selectedNodeId?: string;
-  focusContext?: string;
-  existingStructure?: {
-    nodes: MindMapNode[];
-    connections: MindMapConnection[];
-    semantic_map: any;
-  };
-  evolutionIntent: 'expand' | 'restructure' | 'connect' | 'analyze';
-  conversationHistory: string[];
 }
 
 // Smart Color System (preserved from previous version)
@@ -192,47 +178,24 @@ export default function IntelligentTool() {
       const intent = detectEvolutionIntent(input);
       setEvolutionMode(intent);
 
-      // Build intelligent request with full context
-      const intelligentRequest: IntelligentRequest = {
+      console.log('🧠 Sending request to your API:', {
         input: input.trim(),
         isEvolution: evolve,
-        selectedNodeId: selectedNodeId,
-        focusContext: selectedNodeId ? nodes.find(n => n.id === selectedNodeId)?.data?.label : undefined,
-        existingStructure: evolve ? {
-          nodes: nodes.map(node => ({
-            id: node.id,
-            label: node.data?.label || 'Unknown',
-            type: node.data?.type || 'main',
-            level: node.data?.level || 0,
-            parentId: node.data?.parentId,
-            semantic_weight: node.data?.semantic_weight || 1,
-            concept_category: node.data?.concept_category
-          })),
-          connections: edges.map(edge => ({
-            from: edge.source,
-            to: edge.target,
-            relationship_type: edge.data?.relationship_type || 'hierarchy',
-            strength: edge.data?.strength || 1
-          })),
-          semantic_map: {
-            clusters: semanticClusters,
-            selected_focus: selectedNodeId
-          }
-        } : undefined,
-        evolutionIntent: intent,
-        conversationHistory
-      };
-
-      console.log('🧠 Sending intelligent request:', {
-        intent,
         selectedNode: selectedNodeId,
-        hasExistingStructure: !!intelligentRequest.existingStructure
+        intent
       });
 
-      const response = await fetch('/api/mind-map/intelligent-generate', {
+      // Call your existing API with the correct format
+      const response = await fetch('/api/mind-map/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(intelligentRequest)
+        body: JSON.stringify({
+          input: input.trim(),
+          isEvolution: evolve,
+          existingNodes: evolve ? nodes : [],
+          conversationHistory: conversationHistory,
+          colorScheme: 'calmGreen'
+        })
       });
       
       if (!response.ok) {
@@ -240,13 +203,11 @@ export default function IntelligentTool() {
       }
       
       const result = await response.json();
-      console.log('🎯 Intelligent AI Response:', result);
+      console.log('🎯 API Response:', result);
       
       let mindMapData: MindMapStructure;
-      if (result.success && result.data) {
-        mindMapData = result.data;
-      } else if (result.nodes && result.connections) {
-        mindMapData = result as MindMapStructure;
+      if (result.success && result.mindMap) {
+        mindMapData = result.mindMap;
       } else {
         throw new Error(result.error || 'Failed to generate intelligent mind map');
       }
@@ -360,8 +321,8 @@ export default function IntelligentTool() {
         setEdges(flowEdges);
       }
 
-      setAnalysis(mindMapData.analysis);
-      setSuggestions(mindMapData.suggestions);
+      setAnalysis(mindMapData.analysis || '');
+      setSuggestions(mindMapData.suggestions || []);
       setSemanticClusters(mindMapData.semantic_clusters || []);
       setConversationHistory(prev => [...prev, input.trim()]);
       setCurrentStep('complete');
@@ -385,58 +346,104 @@ export default function IntelligentTool() {
       });
     }
 
-    // Find the most central/important node
-    const connectionCounts = new Map<string, number>();
-    mindMapData.nodes.forEach(node => {
-      const connections = mindMapData.connections.filter(c => c.from === node.id || c.to === node.id);
-      const weight = connections.length + (node.semantic_weight || 1);
-      connectionCounts.set(node.id, weight);
-    });
-    
-    const centerNode = mindMapData.nodes.reduce((prev, current) => {
-      const prevWeight = connectionCounts.get(prev.id) || 0;
-      const currentWeight = connectionCounts.get(current.id) || 0;
-      return currentWeight > prevWeight ? current : prev;
-    });
-    
-    // Position center node
-    if (!positions.has(centerNode.id)) {
-      positions.set(centerNode.id, { x: 0, y: 0 });
-    }
-    
-    // Position nodes in semantic clusters with proper hierarchy
-    const positionedNodes = new Set([centerNode.id]);
-    const queue = [centerNode.id];
-    
-    while (queue.length > 0) {
-      const currentNodeId = queue.shift()!;
-      const currentPos = positions.get(currentNodeId)!;
-      
-      // Find all connected nodes
-      const connectedNodes = mindMapData.connections
-        .filter(c => c.from === currentNodeId)
-        .map(c => mindMapData.nodes.find(n => n.id === c.to))
-        .filter(Boolean) as MindMapNode[];
-      
-      if (connectedNodes.length === 0) continue;
-      
-      // Position connected nodes in a circle around current node
-      const radius = currentNodeId === centerNode.id ? 280 : 180;
-      const angleStep = (2 * Math.PI) / connectedNodes.length;
-      const startAngle = -Math.PI / 2; // Start at top
-      
-      connectedNodes.forEach((node, index) => {
-        if (!positions.has(node.id)) {
-          const angle = startAngle + (index * angleStep);
-          const x = currentPos.x + Math.cos(angle) * radius;
-          const y = currentPos.y + Math.sin(angle) * radius;
-          
-          positions.set(node.id, { x, y });
-          positionedNodes.add(node.id);
-          queue.push(node.id);
-        }
+    // Find the center node (type === 'center')
+    const centerNode = mindMapData.nodes.find(n => n.type === 'center');
+    if (!centerNode) {
+      // If no center node, find the most connected one
+      const connectionCounts = new Map<string, number>();
+      mindMapData.nodes.forEach(node => {
+        const connections = mindMapData.connections.filter(c => c.from === node.id || c.to === node.id);
+        connectionCounts.set(node.id, connections.length);
       });
+      
+      const mostConnected = mindMapData.nodes.reduce((prev, current) => {
+        const prevCount = connectionCounts.get(prev.id) || 0;
+        const currentCount = connectionCounts.get(current.id) || 0;
+        return currentCount > prevCount ? current : prev;
+      });
+      
+      if (!positions.has(mostConnected.id)) {
+        positions.set(mostConnected.id, { x: 0, y: 0 });
+      }
+    } else {
+      // Position center node
+      if (!positions.has(centerNode.id)) {
+        positions.set(centerNode.id, { x: 0, y: 0 });
+      }
     }
+    
+    const rootNodeId = centerNode?.id || mindMapData.nodes[0]?.id;
+    const rootPos = positions.get(rootNodeId) || { x: 0, y: 0 };
+    
+    // Position main nodes in a circle around center
+    const mainNodes = mindMapData.nodes.filter(n => n.type === 'main');
+    mainNodes.forEach((node, index) => {
+      if (!positions.has(node.id)) {
+        const angle = (2 * Math.PI * index) / mainNodes.length - Math.PI / 2; // Start from top
+        const radius = 250;
+        const x = rootPos.x + Math.cos(angle) * radius;
+        const y = rootPos.y + Math.sin(angle) * radius;
+        positions.set(node.id, { x, y });
+      }
+    });
+    
+    // Position sub nodes around their main parents
+    const subNodes = mindMapData.nodes.filter(n => n.type === 'sub');
+    subNodes.forEach((node) => {
+      if (!positions.has(node.id)) {
+        // Find parent through connections
+        const parentConnection = mindMapData.connections.find(c => c.to === node.id);
+        const parentId = parentConnection?.from;
+        const parentPos = parentId ? positions.get(parentId) : rootPos;
+        
+        if (parentPos) {
+          const siblings = subNodes.filter(n => {
+            const siblingParentConnection = mindMapData.connections.find(c => c.to === n.id);
+            return siblingParentConnection?.from === parentId;
+          });
+          const siblingIndex = siblings.indexOf(node);
+          
+          const subRadius = 150;
+          const baseAngle = Math.atan2(parentPos.y - rootPos.y, parentPos.x - rootPos.x);
+          const spreadAngle = Math.PI / 3; // 60 degrees spread
+          const angleStep = siblings.length > 1 ? spreadAngle / (siblings.length - 1) : 0;
+          const angle = baseAngle - spreadAngle/2 + (angleStep * siblingIndex);
+          
+          const x = parentPos.x + Math.cos(angle) * subRadius;
+          const y = parentPos.y + Math.sin(angle) * subRadius;
+          positions.set(node.id, { x, y });
+        }
+      }
+    });
+
+    // Position detail nodes around their sub parents
+    const detailNodes = mindMapData.nodes.filter(n => n.type === 'detail');
+    detailNodes.forEach((node) => {
+      if (!positions.has(node.id)) {
+        // Find parent through connections
+        const parentConnection = mindMapData.connections.find(c => c.to === node.id);
+        const parentId = parentConnection?.from;
+        const parentPos = parentId ? positions.get(parentId) : rootPos;
+        
+        if (parentPos) {
+          const siblings = detailNodes.filter(n => {
+            const siblingParentConnection = mindMapData.connections.find(c => c.to === n.id);
+            return siblingParentConnection?.from === parentId;
+          });
+          const siblingIndex = siblings.indexOf(node);
+          
+          const detailRadius = 100;
+          const baseAngle = Math.atan2(parentPos.y - rootPos.y, parentPos.x - rootPos.x);
+          const spreadAngle = Math.PI / 2; // 90 degrees spread
+          const angleStep = siblings.length > 1 ? spreadAngle / (siblings.length - 1) : 0;
+          const angle = baseAngle - spreadAngle/2 + (angleStep * siblingIndex);
+          
+          const x = parentPos.x + Math.cos(angle) * detailRadius;
+          const y = parentPos.y + Math.sin(angle) * detailRadius;
+          positions.set(node.id, { x, y });
+        }
+      }
+    });
 
     return positions;
   };
@@ -447,61 +454,67 @@ export default function IntelligentTool() {
     allNodes: MindMapNode[],
     connections: MindMapConnection[]
   ): string => {
-    // Find semantic root or most connected node
-    const connectionCounts = new Map<string, number>();
-    allNodes.forEach(n => {
-      const nodeConnections = connections.filter(c => c.from === n.id || c.to === n.id);
-      connectionCounts.set(n.id, nodeConnections.length + (n.semantic_weight || 1));
-    });
-    
-    const rootNode = allNodes.reduce((prev, current) => {
-      const prevCount = connectionCounts.get(prev.id) || 0;
-      const currentCount = connectionCounts.get(current.id) || 0;
-      return currentCount > prevCount ? current : prev;
-    });
-    
-    // Root node gets primary color
-    if (node.id === rootNode.id) {
+    try {
+      // Center node gets primary color
+      if (node.type === 'center') {
+        return BRANCH_COLOR_SYSTEM.primary.color;
+      }
+      
+      // Find the center node
+      const centerNode = allNodes.find(n => n.type === 'center');
+      if (!centerNode) {
+        // If no center node, use index-based coloring
+        const nodeIndex = allNodes.indexOf(node);
+        const colorIndex = nodeIndex % BRANCH_COLOR_SYSTEM.priority.length;
+        return BRANCH_COLOR_SYSTEM.priority[colorIndex].color;
+      }
+      
+      // Find which main branch this node belongs to
+      const findMainBranch = (nodeId: string): string | null => {
+        // If this is a main node connected to center, return itself
+        const directConnection = connections.find(c => c.from === centerNode.id && c.to === nodeId);
+        if (directConnection) return nodeId;
+        
+        // Find parent connection and traverse up
+        const parentConnection = connections.find(c => c.to === nodeId);
+        if (!parentConnection) return null;
+        
+        return findMainBranch(parentConnection.from);
+      };
+      
+      const mainBranchId = findMainBranch(node.id);
+      if (mainBranchId) {
+        // Find all main branches (direct children of center)
+        const mainBranches = connections
+          .filter(c => c.from === centerNode.id)
+          .map(c => c.to);
+        
+        const branchIndex = mainBranches.indexOf(mainBranchId);
+        if (branchIndex !== -1) {
+          let baseColor: string;
+          if (branchIndex < BRANCH_COLOR_SYSTEM.priority.length) {
+            baseColor = BRANCH_COLOR_SYSTEM.priority[branchIndex].color;
+          } else {
+            const additionalIndex = (branchIndex - BRANCH_COLOR_SYSTEM.priority.length) % BRANCH_COLOR_SYSTEM.additional.length;
+            baseColor = BRANCH_COLOR_SYSTEM.additional[additionalIndex].color;
+          }
+          
+          // Apply hierarchy lightening for sub and detail nodes
+          if (node.type === 'sub') {
+            return adjustColorBrightness(baseColor, 1);
+          } else if (node.type === 'detail') {
+            return adjustColorBrightness(baseColor, 2);
+          }
+          
+          return baseColor;
+        }
+      }
+      
+      return BRANCH_COLOR_SYSTEM.primary.color;
+    } catch (error) {
+      console.error('Error in color assignment:', error);
       return BRANCH_COLOR_SYSTEM.primary.color;
     }
-    
-    // Find semantic branch this node belongs to
-    const findSemanticBranch = (nodeId: string): string | null => {
-      // Direct children of root are main branches
-      const directConnection = connections.find(c => c.from === rootNode.id && c.to === nodeId);
-      if (directConnection) return nodeId;
-      
-      // Find parent connection and traverse up
-      const parentConnection = connections.find(c => c.to === nodeId);
-      if (!parentConnection) return null;
-      
-      return findSemanticBranch(parentConnection.from);
-    };
-    
-    const branchRootId = findSemanticBranch(node.id);
-    if (branchRootId) {
-      // Find all main branches (direct children of root)
-      const mainBranches = connections
-        .filter(c => c.from === rootNode.id)
-        .map(c => c.to);
-      
-      const branchIndex = mainBranches.indexOf(branchRootId);
-      if (branchIndex !== -1) {
-        let baseColor: string;
-        if (branchIndex < BRANCH_COLOR_SYSTEM.priority.length) {
-          baseColor = BRANCH_COLOR_SYSTEM.priority[branchIndex].color;
-        } else {
-          const additionalIndex = (branchIndex - BRANCH_COLOR_SYSTEM.priority.length) % BRANCH_COLOR_SYSTEM.additional.length;
-          baseColor = BRANCH_COLOR_SYSTEM.additional[additionalIndex].color;
-        }
-        
-        // Apply hierarchy lightening
-        const level = node.level || 0;
-        return adjustColorBrightness(baseColor, level);
-      }
-    }
-    
-    return BRANCH_COLOR_SYSTEM.primary.color;
   };
 
   // Color brightness adjustment for hierarchy
@@ -538,6 +551,39 @@ export default function IntelligentTool() {
     setCurrentStep('input');
     setIsFullscreen(false);
     setShowFullscreenInput(true);
+  };
+
+  const exportMindMap = (format: 'json') => {
+    if (format === 'json') {
+      const data = {
+        nodes: nodes.map(node => ({
+          id: node.id,
+          label: node.data?.label || 'Unknown',
+          type: node.data?.type || 'main',
+          position: node.position,
+          style: node.style
+        })),
+        edges: edges.map(edge => ({
+          id: edge.id,
+          source: edge.source,
+          target: edge.target,
+          type: edge.type
+        })),
+        analysis,
+        suggestions,
+        timestamp: new Date().toISOString()
+      };
+      
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `mindmap-${Date.now()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
   };
 
   return (
@@ -687,9 +733,10 @@ export default function IntelligentTool() {
             {/* Complete Mind Map */}
             {currentStep === 'complete' && (
               <div className={isFullscreen ? 'flex-1 flex flex-col' : ''}>
-                {/* Controls */}
+                {/* Controls - Better Layout */}
                 {!isFullscreen && (
                   <div className="mb-6">
+                    {/* Input Section */}
                     <div className="mb-4">
                       <textarea
                         value={input}
@@ -712,6 +759,7 @@ export default function IntelligentTool() {
                       )}
                     </div>
                     
+                    {/* Button Section */}
                     <div className="flex flex-wrap gap-3 items-center justify-between mb-4">
                       <div className="flex gap-3">
                         <button
@@ -719,7 +767,7 @@ export default function IntelligentTool() {
                           disabled={!input.trim()}
                           className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50"
                         >
-                          Evolve Intelligently
+                          Continue
                         </button>
                         <button
                           onClick={startOver}
@@ -736,13 +784,19 @@ export default function IntelligentTool() {
                         >
                           Fullscreen
                         </button>
+                        <button
+                          onClick={() => exportMindMap('json')}
+                          className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700"
+                        >
+                          Export JSON
+                        </button>
                       </div>
                     </div>
 
                     {/* AI Suggestions */}
                     {suggestions.length > 0 && (
                       <div className="p-4 bg-blue-50 rounded-lg">
-                        <h3 className="text-lg font-medium text-blue-900 mb-3">🧠 Intelligent Suggestions</h3>
+                        <h3 className="text-lg font-medium text-blue-900 mb-3">💡 AI Expansion Suggestions</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                           {suggestions.map((suggestion, index) => (
                             <button
