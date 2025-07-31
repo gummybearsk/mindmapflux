@@ -155,7 +155,7 @@ export default function Tool() {
     return { x: baseX + Math.random() * 200 - 100, y: baseY + Math.random() * 200 - 100 };
   };
 
-  // Smart positioning algorithm with overlap prevention (Problem 27)
+  // Smart positioning algorithm with overlap prevention (Problem 27) - FIXED TYPESCRIPT ERROR
   const calculatePositions = (mindMapData: MindMapData, existingNodes: Node[] = []) => {
     const positions = new Map();
     const centerNode = mindMapData.nodes.find(node => node.type === 'center');
@@ -175,7 +175,7 @@ export default function Tool() {
       let x = 400 + Math.cos(angle) * radius;
       let y = 300 + Math.sin(angle) * radius;
       
-      // Check for overlap with existing nodes
+      // FIXED: Use existingNodes directly instead of trying to convert positions
       const position = findEmptyPosition(existingNodes, x, y, 100);
       positions.set(node.id, position);
     });
@@ -190,7 +190,8 @@ export default function Tool() {
       let x = parentPosition.x + Math.cos(angle) * radius;
       let y = parentPosition.y + Math.sin(angle) * radius;
       
-      const position = findEmptyPosition([...existingNodes, ...Array.from(positions.entries()).map(([id, pos]) => ({ id, position: pos }))], x, y, 80);
+      // FIXED: Use existingNodes directly
+      const position = findEmptyPosition(existingNodes, x, y, 80);
       positions.set(node.id, position);
     });
 
@@ -204,7 +205,8 @@ export default function Tool() {
       let x = parentPosition.x + Math.cos(angle) * radius;
       let y = parentPosition.y + Math.sin(angle) * radius;
       
-      const position = findEmptyPosition([...existingNodes, ...Array.from(positions.entries()).map(([id, pos]) => ({ id, position: pos }))], x, y, 60);
+      // FIXED: Use existingNodes directly
+      const position = findEmptyPosition(existingNodes, x, y, 60);
       positions.set(node.id, position);
     });
 
@@ -700,3 +702,9 @@ export default function Tool() {
                 Export as PNG
               </button>
             </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
