@@ -134,18 +134,21 @@ export default function IntelligentTool() {
     setNodes((nds) => {
       const updatedNodes = [...nds];
       changes.forEach((change) => {
-        const nodeIndex = updatedNodes.findIndex((node) => node.id === change.id);
-        if (nodeIndex !== -1) {
-          if (change.type === 'position' && 'position' in change && change.position) {
-            updatedNodes[nodeIndex] = {
-              ...updatedNodes[nodeIndex],
-              position: change.position
-            };
-          } else if (change.type === 'select' && 'selected' in change) {
-            updatedNodes[nodeIndex] = {
-              ...updatedNodes[nodeIndex],
-              selected: change.selected
-            };
+        // Only process changes that have an id property
+        if ('id' in change) {
+          const nodeIndex = updatedNodes.findIndex((node) => node.id === change.id);
+          if (nodeIndex !== -1) {
+            if (change.type === 'position' && 'position' in change && change.position) {
+              updatedNodes[nodeIndex] = {
+                ...updatedNodes[nodeIndex],
+                position: change.position
+              };
+            } else if (change.type === 'select' && 'selected' in change) {
+              updatedNodes[nodeIndex] = {
+                ...updatedNodes[nodeIndex],
+                selected: change.selected
+              };
+            }
           }
         }
       });
@@ -158,12 +161,15 @@ export default function IntelligentTool() {
     setEdges((eds) => {
       const updatedEdges = [...eds];
       changes.forEach((change) => {
-        const edgeIndex = updatedEdges.findIndex((edge) => edge.id === change.id);
-        if (edgeIndex !== -1 && change.type === 'select' && 'selected' in change) {
-          updatedEdges[edgeIndex] = {
-            ...updatedEdges[edgeIndex],
-            selected: change.selected
-          };
+        // Only process changes that have an id property
+        if ('id' in change) {
+          const edgeIndex = updatedEdges.findIndex((edge) => edge.id === change.id);
+          if (edgeIndex !== -1 && change.type === 'select' && 'selected' in change) {
+            updatedEdges[edgeIndex] = {
+              ...updatedEdges[edgeIndex],
+              selected: change.selected
+            };
+          }
         }
       });
       return updatedEdges;
