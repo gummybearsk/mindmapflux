@@ -778,7 +778,7 @@ export default function IntelligentTool() {
                     >
                       <Controls />
                       <MiniMap />
-                      <Background variant="dots" gap={12} size={1} />
+                      <Background variant={"dots" as any} gap={12} size={1} />
                     </ReactFlow>
                   ) : (
                     <div className="w-full h-full flex items-center justify-center bg-gray-100">
